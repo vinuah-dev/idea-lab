@@ -1,0 +1,23 @@
+{
+  "name": "MedOrchestra — Multi-Agent Hospital AI",
+  "short_name": "MedOrchestra",
+  "description": "Multi-agent AI platform for hospital resource optimisation, clinical workflow automation and patient-care coordination",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f766e",
+  "categories": ["medical", "health", "productivity"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "shortcuts": [
+    { "name": "AI Agent Console", "url": "/agents" },
+    { "name": "Emergency", "url": "/emergency" },
+    { "name": "Inpatients", "url": "/inpatients" }
+  ]
+}

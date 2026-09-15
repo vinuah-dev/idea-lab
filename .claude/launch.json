@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend",
+      "runtimeExecutable": "D:\\codin\\idea lab\\backend\\.venv\\Scripts\\python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--port", "8000", "--app-dir", "D:\\codin\\idea lab\\backend"],
+      "port": 8000
+    },
+    {
+      "name": "frontend",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["D:\\codin\\idea lab\\frontend\\node_modules\\vite\\bin\\vite.js", "D:\\codin\\idea lab\\frontend", "--port", "5173"],
+      "port": 5173
+    }
+  ]
+}
