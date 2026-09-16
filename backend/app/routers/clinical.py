@@ -230,7 +230,7 @@ def triage_preview(body: TriagePreviewIn, _: User = Depends(require_roles(*STAFF
 def list_er(active: bool = True, db: Session = Depends(get_db), _: User = Depends(require_roles(*STAFF_ROLES))):
     stmt = select(EmergencyCase)
     if active:
-        stmt = stmt.where(EmergencyCase.status.in_(["triage", "awaiting_bed", "in_treatment"]))
+        stmt = stmt.where(EmergencyCase.status.in_(["incoming", "triage", "awaiting_bed", "in_treatment"]))
     rows = db.scalars(stmt.order_by(EmergencyCase.triage_level, EmergencyCase.created_at).limit(100)).all()
     return [ser.emergency(e) for e in rows]
 
@@ -271,7 +271,7 @@ def patch_er(cid: int, body: ErPatch, db: Session = Depends(get_db), user: User 
     c = db.get(EmergencyCase, cid)
     if not c:
         raise HTTPException(404, "Case not found")
-    if body.status not in ("triage", "awaiting_bed", "in_treatment", "admitted", "discharged"):
+    if body.status not in ("incoming", "triage", "awaiting_bed", "in_treatment", "admitted", "discharged"):
         raise HTTPException(400, "Invalid status")
     c.status = body.status
     if body.status == "in_treatment" and not c.seen_at:

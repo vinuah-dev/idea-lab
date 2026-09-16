@@ -13,15 +13,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .database import Base, SessionLocal, engine
-from .models import (Admission, Appointment, AuditLog, Bed, CareTask, DailyStat, Department, DiagnosticOrder,
-                     EmergencyCase, Medication, Notification, Patient, Prescription, Resource, Shift, Staff, Surgery, User,
-                     VitalSign, Ward)
+from .models import (Admission, Ambulance, Appointment, AuditLog, Bed, CareTask, ClinicalNote, DailyStat, Department, DiagnosticOrder,
+                     EmergencyCase, InsuranceClaim, Medication, Notification, Patient, Prescription, Resource, Shift, Staff, Surgery,
+                     User, VitalSign, Ward)
 from .security import hash_password
+from .services import billing
 from .services.clinical import TEST_CATALOG
+from .services.dispatch import FLEET, HOSPITAL, LOCALITIES
 from .services.ot_scheduler import PROCEDURES, TURNOVER
 from .services.triage import clinical_risk, compute_news2, triage
 
 RNG = random.Random(7)
+AUX = random.Random(99)  # separate stream for v2 data so the core demo data stays identical
 
 DEPARTMENTS = [  # name, code, floor, avg consult minutes
     ("Emergency", "ER", 0, 10), ("Critical Care", "ICU", 3, 20), ("Cardiology", "CAR", 2, 15), ("Neurology", "NEU", 2, 18),
@@ -276,6 +279,16 @@ def seed(db: Session) -> None:
                             next_free_at=now + timedelta(minutes=RNG.randint(10, 50)) if status == "in_use" else None))
     db.flush()
 
+    # ---------------------------------------------------------------- 108 ambulance fleet (pre-hospital coordination)
+    for code, vtype, base in FLEET:
+        lat, lng = (HOSPITAL["lat"], HOSPITAL["lng"]) if base == "Hospital base" else LOCALITIES[base]
+        crew = [f"{AUX.choice(FIRST_M + FIRST_F)} {AUX.choice(LAST)} (EMT)", f"{AUX.choice(FIRST_M)} {AUX.choice(LAST)} (driver)"]
+        if vtype == "ALS":
+            crew.insert(0, f"{AUX.choice(FIRST_M + FIRST_F)} {AUX.choice(LAST)} (paramedic)")
+        db.add(Ambulance(code=code, vehicle_type=vtype, base=base, base_lat=lat, base_lng=lng, lat=lat, lng=lng, crew=crew,
+                         status="maintenance" if code == "AMB-08" else "available"))
+    db.flush()
+
     # ---------------------------------------------------------------- patients
     patients: list[Patient] = []
     demo_patient = _new_patient(db, 0, age=34, gender="Male", name="Rohan Mehta")
@@ -283,6 +296,13 @@ def seed(db: Session) -> None:
     patients.append(demo_patient)
     for n in range(1, 320):
         patients.append(_new_patient(db, n))
+    for p in patients[1:]:  # payer mix: ~35% PM-JAY beneficiaries, ~15% private insurance
+        r = AUX.random()
+        if r < 0.35:
+            p.insurance_scheme, p.insurance_id = "pmjay", f"PMJAY-{AUX.randint(10**8, 10**9 - 1)}"
+        elif r < 0.5:
+            p.insurance_scheme, p.insurance_id = "private", f"PVT-{AUX.randint(10**4, 10**5 - 1)}"
+    demo_patient.phone, demo_patient.insurance_scheme, demo_patient.insurance_id = "+91 98220 41234", "private", "PVT-44821"
     db.flush()
     free_pool = [p for p in patients[1:]]
     RNG.shuffle(free_pool)
@@ -499,6 +519,10 @@ def seed(db: Session) -> None:
                        reason="Hypertension review", queue_number=2, booked_by="reception",
                        checked_in_at=today - timedelta(days=12, hours=-10), started_at=today - timedelta(days=12, hours=-10, minutes=-12),
                        completed_at=today - timedelta(days=12, hours=-10, minutes=-27)))
+    # demo patient: an appointment later today, used to demonstrate the self check-in kiosk (MRN-1001 + phone 1234)
+    db.add(Appointment(patient_id=demo_patient.id, doctor_id=cardio_doc.id, department_id=depts["CAR"].id,
+                       scheduled_at=(now + timedelta(minutes=90)).replace(second=0, microsecond=0), status="scheduled", priority=3,
+                       reason="ECG and BP check", queue_number=queue_counter.get(cardio_doc.id, 0) + 1, booked_by="patient portal"))
     db.flush()
 
     # ---------------------------------------------------------------- diagnostics
@@ -583,6 +607,33 @@ def seed(db: Session) -> None:
                          surgeries=max(2, round(9 * weekly + RNG.gauss(0, 1.5))), bed_occupancy=round(occ, 3),
                          icu_occupancy=round(icu, 3), avg_wait_minutes=round(max(12, 18 + 22 * occ * weekly + RNG.gauss(0, 4)), 1)))
 
+    db.flush()
+
+    # ---------------------------------------------------------------- billing: auto-captured charges, deposits, pre-auth claims
+    for p, adm in admitted:
+        inv = billing.sync_patient(db, p, force=True)
+        if not inv:
+            continue
+        s = billing.summarize(inv)
+        if inv.payer == "self" and s["balance"] > 5000 and AUX.random() < 0.6:
+            deposit = min(round(s["balance"] * 0.6, -2), AUX.choice([10000, 15000, 20000, 25000]))
+            billing.record_payment(db, inv, deposit, AUX.choice(["upi", "card", "cash"]), f"DEP-{AUX.randint(10**6, 10**7 - 1)}", "Kavita Rao (Front Desk)")
+        elif inv.payer == "private" and AUX.random() < 0.6:
+            billing.submit_claim(db, inv)  # cashless pre-authorisation already sent to the TPA
+    first_private = db.scalar(select(InsuranceClaim).where(InsuranceClaim.scheme == "private").order_by(InsuranceClaim.id))
+    if first_private:
+        billing.decide_claim(db, first_private, True, round(first_private.claimed_amount * 0.9, -2), "Approved with 10% non-payables deduction")
+
+    # ---------------------------------------------------------------- clinical notes (signed progress notes)
+    for p, adm in admitted[:10]:
+        doc = db.get(Staff, adm.doctor_id)
+        db.add(ClinicalNote(patient_id=p.id, note_type="progress", status="signed", author=f"{doc.name} (doctor)",
+                            subjective="Feels better than yesterday; tolerating oral diet. No new complaints overnight.",
+                            objective="Afebrile on the ward round; haemodynamically stable. Chest clear, abdomen soft.",
+                            assessment=f"{adm.reason} — clinically improving.",
+                            plan="- Continue current treatment\n- Review investigations on the evening round\n- Mobilise with physiotherapy",
+                            created_at=adm.admitted_at + timedelta(hours=18)))
+
     # ---------------------------------------------------------------- users
     staff_by_role_dept = {}
     for s in doctors + nurses + techs + pharmacists:
@@ -613,6 +664,9 @@ def seed(db: Session) -> None:
 
 
 def reset_and_seed() -> None:
+    from .services.telemetry import hub
+    billing._recent_sync.clear()
+    hub.state.clear()
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
@@ -628,6 +682,23 @@ def needs_seed() -> bool:
         return db.scalar(select(User).limit(1)) is None
     finally:
         db.close()
+
+
+def schema_outdated() -> bool:
+    """True when the database predates the current models (missing table or column) → rebuild the demo data."""
+    from sqlalchemy import inspect
+
+    insp = inspect(engine)
+    existing = set(insp.get_table_names())
+    if not existing:
+        return False
+    for table in Base.metadata.sorted_tables:
+        if table.name not in existing:
+            return True
+        cols = {c["name"] for c in insp.get_columns(table.name)}
+        if any(c.name not in cols for c in table.columns):
+            return True
+    return False
 
 
 def is_stale() -> bool:

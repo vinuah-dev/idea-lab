@@ -83,6 +83,8 @@ class Patient(Base):
     # registered|waiting|in_consultation|admitted|icu|emergency|discharged
     primary_doctor_id: Mapped[int | None] = mapped_column(ForeignKey("staff.id"), nullable=True)
     risk_score: Mapped[float] = mapped_column(Float, default=0.0)
+    insurance_scheme: Mapped[str] = mapped_column(String(20), default="self")  # self|pmjay|private|cghs
+    insurance_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
     primary_doctor: Mapped[Staff | None] = relationship()
@@ -246,7 +248,7 @@ class EmergencyCase(Base):
     news2_score: Mapped[int] = mapped_column(Integer, default=0)
     triage_level: Mapped[int] = mapped_column(Integer, default=3)  # 1 resuscitation .. 5 non-urgent
     status: Mapped[str] = mapped_column(String(20), default="triage", index=True)
-    # triage|awaiting_bed|in_treatment|admitted|discharged
+    # incoming (ambulance pre-alert)|triage|awaiting_bed|in_treatment|admitted|discharged
     assigned_bed_id: Mapped[int | None] = mapped_column(ForeignKey("beds.id"), nullable=True)
     assigned_doctor_id: Mapped[int | None] = mapped_column(ForeignKey("staff.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
@@ -397,6 +399,136 @@ class Surgery(Base):
     patient: Mapped[Patient] = relationship()
     surgeon: Mapped[Staff | None] = relationship()
     ot: Mapped[Resource | None] = relationship()
+
+
+class ClinicalNote(Base):
+    """SOAP progress / handover note. AI-drafted notes stay drafts until a clinician signs them."""
+
+    __tablename__ = "clinical_notes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), index=True)
+    note_type: Mapped[str] = mapped_column(String(20), default="progress")  # progress|handover|discharge
+    subjective: Mapped[str] = mapped_column(Text, default="")
+    objective: Mapped[str] = mapped_column(Text, default="")
+    assessment: Mapped[str] = mapped_column(Text, default="")
+    plan: Mapped[str] = mapped_column(Text, default="")
+    ai_drafted: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(10), default="signed")  # draft|signed
+    author: Mapped[str] = mapped_column(String(120), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now, index=True)
+
+
+# ---------------------------------------------------------------- billing & insurance
+class Invoice(Base):
+    __tablename__ = "invoices"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    number: Mapped[str] = mapped_column(String(20), unique=True)
+    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), index=True)
+    admission_id: Mapped[int | None] = mapped_column(ForeignKey("admissions.id"), nullable=True)
+    payer: Mapped[str] = mapped_column(String(20), default="self")  # self|pmjay|private|cghs
+    status: Mapped[str] = mapped_column(String(20), default="open", index=True)  # open|final|settled|cancelled
+    discount: Mapped[float] = mapped_column(Float, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    finalized_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    patient: Mapped[Patient] = relationship()
+    charges: Mapped[list[Charge]] = relationship(back_populates="invoice", order_by="Charge.id")
+    payments: Mapped[list[Payment]] = relationship(back_populates="invoice", order_by="Payment.id")
+    claims: Mapped[list[InsuranceClaim]] = relationship(back_populates="invoice", order_by="InsuranceClaim.id")
+
+
+class Charge(Base):
+    __tablename__ = "charges"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    invoice_id: Mapped[int] = mapped_column(ForeignKey("invoices.id"), index=True)
+    category: Mapped[str] = mapped_column(String(20))  # room|nursing|consultation|diagnostic|pharmacy|procedure|emergency|equipment
+    description: Mapped[str] = mapped_column(String(160))
+    quantity: Mapped[float] = mapped_column(Float, default=1)
+    unit_price: Mapped[float] = mapped_column(Float, default=0)
+    amount: Mapped[float] = mapped_column(Float, default=0)
+    source_ref: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)  # e.g. "order:12" (idempotent capture)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+    invoice: Mapped[Invoice] = relationship(back_populates="charges")
+
+
+class Payment(Base):
+    __tablename__ = "payments"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    invoice_id: Mapped[int] = mapped_column(ForeignKey("invoices.id"), index=True)
+    amount: Mapped[float] = mapped_column(Float)
+    mode: Mapped[str] = mapped_column(String(15), default="cash")  # cash|upi|card|insurance
+    reference: Mapped[str] = mapped_column(String(60), default="")
+    received_by: Mapped[str] = mapped_column(String(120), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+    invoice: Mapped[Invoice] = relationship(back_populates="payments")
+
+
+class InsuranceClaim(Base):
+    __tablename__ = "insurance_claims"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    invoice_id: Mapped[int] = mapped_column(ForeignKey("invoices.id"), index=True)
+    scheme: Mapped[str] = mapped_column(String(20))  # pmjay|private|cghs
+    package_code: Mapped[str] = mapped_column(String(20), default="")
+    package_name: Mapped[str] = mapped_column(String(160), default="")
+    claimed_amount: Mapped[float] = mapped_column(Float, default=0)
+    approved_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    status: Mapped[str] = mapped_column(String(15), default="submitted", index=True)  # submitted|approved|rejected|settled
+    documents: Mapped[list] = mapped_column(JSON, default=list)
+    notes: Mapped[str] = mapped_column(String(255), default="")
+    submitted_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    invoice: Mapped[Invoice] = relationship(back_populates="claims")
+
+
+# ---------------------------------------------------------------- pre-hospital (108 ambulance) coordination
+class Ambulance(Base):
+    __tablename__ = "ambulances"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(12), unique=True)
+    vehicle_type: Mapped[str] = mapped_column(String(4), default="BLS")  # BLS|ALS
+    status: Mapped[str] = mapped_column(String(20), default="available", index=True)
+    # available|to_scene|on_scene|to_hospital|at_hospital|returning|maintenance
+    base: Mapped[str] = mapped_column(String(60))
+    base_lat: Mapped[float] = mapped_column(Float)
+    base_lng: Mapped[float] = mapped_column(Float)
+    lat: Mapped[float] = mapped_column(Float)
+    lng: Mapped[float] = mapped_column(Float)
+    crew: Mapped[list] = mapped_column(JSON, default=list)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class Dispatch(Base):
+    __tablename__ = "dispatches"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ambulance_id: Mapped[int] = mapped_column(ForeignKey("ambulances.id"), index=True)
+    patient_id: Mapped[int | None] = mapped_column(ForeignKey("patients.id"), nullable=True)
+    emergency_case_id: Mapped[int | None] = mapped_column(ForeignKey("emergency_cases.id"), nullable=True)
+    request_id: Mapped[int | None] = mapped_column(ForeignKey("agent_requests.id"), nullable=True)  # pre-arrival orchestration
+    caller: Mapped[str] = mapped_column(String(60), default="")
+    locality: Mapped[str] = mapped_column(String(80), default="")
+    pickup_lat: Mapped[float] = mapped_column(Float)
+    pickup_lng: Mapped[float] = mapped_column(Float)
+    complaint: Mapped[str] = mapped_column(String(255))
+    severity: Mapped[int] = mapped_column(Integer, default=3)  # predicted triage level 1..5
+    vitals: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(20), default="to_scene", index=True)
+    # to_scene|on_scene|to_hospital|arrived|cancelled
+    distance_scene_km: Mapped[float] = mapped_column(Float, default=0)
+    distance_hospital_km: Mapped[float] = mapped_column(Float, default=0)
+    eta_scene_min: Mapped[float] = mapped_column(Float, default=0)
+    eta_hospital_min: Mapped[float] = mapped_column(Float, default=0)
+    progress: Mapped[float] = mapped_column(Float, default=0)  # 0..1 of the current leg
+    selection: Mapped[list] = mapped_column(JSON, default=list)  # explainable candidate ranking
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now, index=True)
+    on_scene_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    departed_scene_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    arrived_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    ambulance: Mapped[Ambulance] = relationship()
+    patient: Mapped[Patient | None] = relationship()
 
 
 class Setting(Base):

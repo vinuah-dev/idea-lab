@@ -3,26 +3,33 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import {
   Activity, ArrowLeft, BedDouble, CalendarClock, CheckCircle2, Circle, FileText, FlaskConical, HeartPulse, Loader2, LogOut, MapPin, Pill,
-  Scissors, Siren, Stethoscope,
+  RefreshCcw, Scissors, Siren, Sparkles, Stethoscope,
 } from 'lucide-react'
 import { api } from '../api'
+import InvoiceView from '../components/InvoiceView'
 import VitalsModal from '../components/VitalsModal'
-import { Badge, Button, Card, Empty, Progress, Spinner, StatusBadge, Tabs } from '../components/ui'
+import { Badge, Button, Card, Empty, Factors, Field, Modal, Progress, Spinner, StatusBadge, Tabs, useToast } from '../components/ui'
 import { useAuth } from '../auth'
 import { useApi } from '../live'
-import { agentLink, cls, fmtDateTime, fmtTime, label, newsClass } from '../utils'
+import { agentLink, cls, fmtDateTime, fmtTime, label, newsClass, PAYER_TONE } from '../utils'
 
-type Tab = 'timeline' | 'admissions' | 'appointments' | 'diagnostics' | 'prescriptions' | 'surgeries' | 'emergency'
+type Tab = 'timeline' | 'notes' | 'billing' | 'admissions' | 'appointments' | 'diagnostics' | 'prescriptions' | 'surgeries' | 'emergency'
+const PAYER_LABEL: Record<string, string> = { self: 'Self-pay', pmjay: 'PM-JAY (Ayushman Bharat)', private: 'Private insurance (TPA)' }
 const KIND_ICON: Record<string, any> = { admission: BedDouble, discharge: BedDouble, appointment: CalendarClock, diagnostic: FlaskConical, prescription: Pill, emergency: Siren, surgery: Scissors }
 
 export default function PatientDetail() {
   const { id } = useParams()
   const { user } = useAuth()
   const nav = useNavigate()
-  const [tab, setTab] = useState<Tab>('timeline')
+  const [tab, setTab] = useState<Tab>(() => (new URLSearchParams(window.location.search).get('tab') as Tab) || 'timeline')
   const [vitalsOpen, setVitalsOpen] = useState(false)
   const { data, loading, reload } = useApi<any>(`/api/patients/${id}`, ['patients', 'diagnostics', 'pharmacy', 'appointments', 'beds', 'surgeries'])
   const vitals = useApi<any[]>(`/api/patients/${id}/vitals`, ['ward', 'patients'])
+  const risk = useApi<any>(`/api/patients/${id}/readmission-risk`, ['patients', 'diagnostics', 'pharmacy'])
+  const notes = useApi<any[]>(tab === 'notes' ? `/api/patients/${id}/notes` : null, ['patients'])
+  const bill = useApi<any>(tab === 'billing' ? `/api/billing/patients/${id}` : null, ['billing', 'pharmacy', 'diagnostics'])
+  const [draft, setDraft] = useState<any>(null)
+  const toast = useToast()
   if (loading && !data) return <Spinner />
   if (!data) return <Empty title="Patient not found" />
   const p = data.patient
@@ -46,6 +53,20 @@ export default function PatientDetail() {
   ]
   const chart = (vitals.data || []).map((v) => ({ t: fmtTime(v.recorded_at), NEWS2: v.news2, HR: v.hr, 'SpO₂': v.spo2, SBP: v.sbp }))
   const last = vitals.data?.[vitals.data.length - 1]
+  const startDraft = async () => {
+    try { setDraft(await api(`/api/patients/${p.id}/notes/draft`, { method: 'POST' })) }
+    catch (e: any) { toast({ title: 'Could not draft note', message: e.message, level: 'critical' }) }
+  }
+  const saveNote = async (status: 'draft' | 'signed') => {
+    try {
+      await api(`/api/patients/${p.id}/notes`, { body: { ...draft, status } })
+      toast({ title: status === 'signed' ? 'Note signed' : 'Draft saved', level: 'success' })
+      setDraft(null)
+      setTab('notes')
+      notes.reload()
+    } catch (e: any) { toast({ title: 'Could not save note', message: e.message, level: 'critical' }) }
+  }
+  const rr = risk.data
 
   return (
     <div>
@@ -63,6 +84,7 @@ export default function PatientDetail() {
           <dl className="mt-4 space-y-2 text-sm">
             <div className="flex justify-between"><dt className="text-slate-500">Phone</dt><dd>{p.phone || '—'}</dd></div>
             <div className="flex justify-between"><dt className="text-slate-500">Primary doctor</dt><dd>{p.primary_doctor || '—'}</dd></div>
+            <div className="flex items-center justify-between"><dt className="text-slate-500">Payer</dt><dd><Badge tone={PAYER_TONE[p.insurance_scheme] || 'slate'}>{PAYER_LABEL[p.insurance_scheme] || 'Self-pay'}</Badge>{p.insurance_id && <span className="ml-1 font-mono text-[10px] text-slate-400">{p.insurance_id}</span>}</dd></div>
             <div><dt className="mb-1 text-slate-500">Clinical risk score</dt><dd><Progress value={p.risk_score} /></dd></div>
             <div><dt className="mb-1 text-slate-500">Allergies</dt><dd className="flex flex-wrap gap-1">{p.allergies.length ? p.allergies.map((a: string) => <Badge key={a} tone="red">⚠ {a}</Badge>) : <span className="text-xs text-slate-400">No known allergies</span>}</dd></div>
             <div><dt className="mb-1 text-slate-500">Conditions</dt><dd className="flex flex-wrap gap-1">{p.conditions.length ? p.conditions.map((c: string) => <Badge key={c}>{c}</Badge>) : <span className="text-xs text-slate-400">None recorded</span>}</dd></div>
@@ -140,9 +162,29 @@ export default function PatientDetail() {
         )}
       </Card>
 
+      {rr && (
+        <Card className="mt-4" title="30-day readmission risk & follow-up plan" icon={<RefreshCcw className="h-4 w-4" />}
+          subtitle="LACE index + logistic-regression model · sets the follow-up interval the agents book at discharge">
+          <div className="grid gap-4 lg:grid-cols-[14rem_1fr_1fr]">
+            <div className="flex items-center gap-3">
+              <div className={cls('flex h-16 w-16 flex-col items-center justify-center rounded-xl text-white', rr.band === 'high' ? 'bg-red-600' : rr.band === 'moderate' ? 'bg-amber-500' : 'bg-emerald-600')}>
+                <div className="text-xl font-bold leading-none">{Math.round(rr.probability * 100)}%</div><div className="text-[10px] uppercase">{rr.band}</div>
+              </div>
+              <div className="text-xs text-slate-600"><div>LACE score <b>{rr.lace.score}</b>/19</div><div>Follow-up in <b>{rr.follow_up_days} days</b></div><div>LOS {rr.los_days} d · {rr.active_medicines} active meds</div></div>
+            </div>
+            <div><div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">LACE components</div><Factors factors={rr.factors} /></div>
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Suggested transitions-of-care actions</div>
+              {rr.actions.length ? <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-slate-700">{rr.actions.map((a: string) => <li key={a}>{a}</li>)}</ul> : <div className="mt-1 text-xs text-slate-400">Routine follow-up is sufficient.</div>}
+            </div>
+          </div>
+        </Card>
+      )}
+
       <div className="mt-4">
         <Tabs<Tab> value={tab} onChange={setTab} tabs={[
-          { id: 'timeline', label: `Timeline (${data.timeline.length})` }, { id: 'admissions', label: `Admissions (${data.admissions.length})` },
+          { id: 'timeline', label: `Timeline (${data.timeline.length})` }, { id: 'notes', label: 'Clinical notes' }, { id: 'billing', label: 'Billing' },
+          { id: 'admissions', label: `Admissions (${data.admissions.length})` },
           { id: 'appointments', label: `Appointments (${data.appointments.length})` }, { id: 'diagnostics', label: `Diagnostics (${data.diagnostics.length})` },
           { id: 'prescriptions', label: `Prescriptions (${data.prescriptions.length})` }, { id: 'surgeries', label: `Surgeries (${data.surgeries.length})` },
           { id: 'emergency', label: `Emergency (${data.emergency.length})` }]} />
@@ -161,6 +203,35 @@ export default function PatientDetail() {
               })}
             </ol>
           ))}
+          {tab === 'notes' && (
+            <div>
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <span className="text-xs text-slate-500">SOAP progress notes. AI drafts are built from chart data and must be reviewed and signed by a clinician.</span>
+                {canRecord && <Button size="sm" className="ml-auto" icon={<Sparkles className="h-3.5 w-3.5" />} onClick={startDraft}>AI-draft SOAP note</Button>}
+              </div>
+              {!notes.data ? <Spinner /> : !notes.data.length ? <Empty title="No notes yet" /> : (
+                <div className="space-y-3">
+                  {notes.data.map((n) => (
+                    <div key={n.id} className="rounded-xl border border-slate-200 p-3">
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                        <span className="font-medium text-slate-700">{n.author}</span><span>{fmtDateTime(n.created_at)}</span>
+                        <StatusBadge status={n.status} />{n.ai_drafted && <Badge tone="violet"><Sparkles className="h-3 w-3" />AI-drafted, clinician-reviewed</Badge>}
+                      </div>
+                      <dl className="mt-2 grid gap-1.5 text-sm md:grid-cols-2">
+                        {(['subjective', 'objective', 'assessment', 'plan'] as const).map((k) => (
+                          <div key={k}><dt className="text-[11px] font-semibold uppercase text-teal-700">{k[0].toUpperCase()} · {k}</dt><dd className="whitespace-pre-wrap text-slate-700">{n[k] || '—'}</dd></div>
+                        ))}
+                      </dl>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {tab === 'billing' && (!bill.data ? <Spinner /> : !bill.data.invoice ? <Empty title="No billable activity in the current episode" /> : (
+            <InvoiceView inv={bill.data.invoice} canCollect={['admin', 'receptionist'].includes(user!.role)} canClaim={['admin', 'receptionist'].includes(user!.role)}
+              onChanged={bill.reload} printHref={`/print/invoice/${bill.data.invoice.id}`} />
+          ))}
           {tab === 'admissions' && <Table rows={data.admissions} cols={[['Ward', (a) => a.ward], ['Bed', (a) => a.bed], ['Reason', (a) => a.reason], ['Acuity', (a) => <StatusBadge status={a.acuity} />],
             ['Doctor', (a) => a.doctor], ['Admitted', (a) => fmtDateTime(a.admitted_at)], ['Expected discharge', (a) => fmtDateTime(a.expected_discharge)], ['Status', (a) => <StatusBadge status={a.status} />],
             ['', (a) => <button className="text-xs text-teal-700 hover:underline" onClick={() => window.open(`/print/discharge/${a.id}`, '_blank')}>Summary</button>]]} />}
@@ -175,6 +246,19 @@ export default function PatientDetail() {
         </Card>
       </div>
       <VitalsModal patient={vitalsOpen ? { id: p.id, name: p.name } : null} onClose={() => setVitalsOpen(false)} onSaved={() => { vitals.reload(); reload() }} />
+      <Modal open={!!draft} wide onClose={() => setDraft(null)} title={<span className="inline-flex items-center gap-2"><Sparkles className="h-4 w-4 text-violet-600" />AI-drafted SOAP note — {p.name}</span>}
+        footer={<><Button variant="secondary" onClick={() => saveNote('draft')}>Save as draft</Button><Button onClick={() => saveNote('signed')}>Review done — sign note</Button></>}>
+        {draft && (
+          <div className="space-y-3">
+            <div className="rounded-lg bg-violet-50 px-3 py-2 text-xs text-violet-800">{draft.disclaimer}</div>
+            {(['subjective', 'objective', 'assessment', 'plan'] as const).map((k) => (
+              <Field key={k} label={`${k[0].toUpperCase()} — ${k}`}>
+                <textarea className="input min-h-[80px] font-mono text-xs" value={draft[k]} onChange={(e) => setDraft({ ...draft, [k]: e.target.value })} />
+              </Field>
+            ))}
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

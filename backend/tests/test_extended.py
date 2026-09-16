@@ -112,11 +112,12 @@ def test_user_management_and_password_change(client, admin):
     uid = r.json()["id"]
     tok = client.post("/api/auth/login", json={"username": "test.nurse", "password": "secret12"}).json()["access_token"]
     h = {"Authorization": f"Bearer {tok}"}
-    assert client.post("/api/auth/change-password", headers=h, json={"current_password": "wrong", "new_password": "newsecret"}).status_code == 400
-    assert client.post("/api/auth/change-password", headers=h, json={"current_password": "secret12", "new_password": "newsecret"}).status_code == 200
-    assert client.post("/api/auth/login", json={"username": "test.nurse", "password": "newsecret"}).status_code == 200
+    assert client.post("/api/auth/change-password", headers=h, json={"current_password": "wrong", "new_password": "newsecret9"}).status_code == 400
+    assert client.post("/api/auth/change-password", headers=h, json={"current_password": "secret12", "new_password": "weak"}).status_code in (400, 422)
+    assert client.post("/api/auth/change-password", headers=h, json={"current_password": "secret12", "new_password": "newsecret9"}).status_code == 200
+    assert client.post("/api/auth/login", json={"username": "test.nurse", "password": "newsecret9"}).status_code == 200
     client.patch(f"/api/users/{uid}", headers=admin, json={"active": False})
-    assert client.post("/api/auth/login", json={"username": "test.nurse", "password": "newsecret"}).status_code == 401
+    assert client.post("/api/auth/login", json={"username": "test.nurse", "password": "newsecret9"}).status_code == 401
     assert client.get("/api/users", headers=h).status_code == 401
 
 

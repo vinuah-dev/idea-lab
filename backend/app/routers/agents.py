@@ -30,6 +30,11 @@ SCENARIOS = [
     {"title": "Schedule surgery", "text": "Schedule a laparoscopic cholecystectomy for Rohan Mehta tomorrow", "tag": "surgery"},
     {"title": "Optimise OT schedule", "text": "Optimize the operation theatre schedule for tomorrow to reduce overtime", "tag": "surgery"},
     {"title": "Patient journey", "text": "Where is Rohan Mehta in his care journey and what is pending?", "tag": "patient status"},
+    {"title": "108 ambulance call", "text": "Road accident at Wardhaman Nagar, motorcyclist with head injury — send an ambulance", "tag": "ambulance"},
+    {"title": "Patient bill & insurance", "text": "What is the bill for Rohan Mehta?", "tag": "billing"},
+    {"title": "Cost estimate", "text": "Estimate the cost of a total knee replacement for Rohan Mehta", "tag": "billing"},
+    {"title": "What-if surge (digital twin)", "text": "What if ER arrivals increase by 50% for the next 3 days?", "tag": "digital twin"},
+    {"title": "Hinglish request", "text": "ICU mein kitne bed khali hain?", "tag": "hinglish"},
 ]
 
 

@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
-  Activity, BarChart3, BedDouble, Bell, Bot, Brain, CalendarClock, ClipboardCheck, Download, FlaskConical, HeartPulse, KeyRound,
-  LayoutDashboard, LogOut, Menu, Pill, Scissors, ScrollText, Search, Settings, ShieldCheck, Siren, UserCog, Users, X, Zap,
+  Activity, Ambulance, BarChart3, BedDouble, Bell, Bot, Boxes, Brain, CalendarClock, ClipboardCheck, ClipboardList, Download, ExternalLink, FlaskConical,
+  HeartPulse, KeyRound, LayoutDashboard, LogOut, Menu, MonitorDot, Pill, Receipt, Scale, Scissors, ScrollText, Search, Settings, ShieldCheck, Siren,
+  UserCog, Users, X, Zap,
 } from 'lucide-react'
 import { api } from '../api'
 import { useAuth, type Role } from '../auth'
 import { useApi, useLive, useLiveStatus } from '../live'
 import { ago, cls } from '../utils'
 import CommandPalette, { type PaletteItem } from './CommandPalette'
+import Copilot from './Copilot'
 import { Badge, Button, Field, Modal, useToast } from './ui'
 
 interface NavItem { to: string; label: string; icon: any; roles?: Role[]; badge?: 'approvals' }
@@ -21,19 +23,25 @@ const NAV: { group: string; items: NavItem[] }[] = [
   ] },
   { group: 'Clinical', items: [
     { to: '/emergency', label: 'Emergency', icon: Siren, roles: ['admin', 'doctor', 'nurse', 'receptionist'] },
+    { to: '/ambulance', label: 'Ambulance & 108', icon: Ambulance, roles: ['admin', 'doctor', 'nurse', 'receptionist'] },
+    { to: '/monitor', label: 'ICU Central Monitor', icon: MonitorDot, roles: ['admin', 'doctor', 'nurse'] },
     { to: '/inpatients', label: 'Inpatients & Early Warning', icon: Activity },
+    { to: '/handover', label: 'Shift Handover (SBAR)', icon: ClipboardList, roles: ['admin', 'doctor', 'nurse'] },
     { to: '/patients', label: 'Patients', icon: HeartPulse },
     { to: '/opd', label: 'OPD & Queue', icon: CalendarClock },
     { to: '/diagnostics', label: 'Diagnostics', icon: FlaskConical },
     { to: '/pharmacy', label: 'Pharmacy', icon: Pill },
   ] },
-  { group: 'Resources', items: [
+  { group: 'Resources & finance', items: [
     { to: '/beds', label: 'Beds & Equipment', icon: BedDouble },
     { to: '/theatres', label: 'Operation Theatres', icon: Scissors },
     { to: '/staff', label: 'Staff & Rosters', icon: Users },
+    { to: '/billing', label: 'Billing & Insurance', icon: Receipt, roles: ['admin', 'receptionist', 'doctor'] },
   ] },
   { group: 'Insights & admin', items: [
     { to: '/analytics', label: 'Analytics & Forecast', icon: BarChart3 },
+    { to: '/twin', label: 'Digital Twin (what-if)', icon: Boxes, roles: ['admin', 'doctor', 'nurse'] },
+    { to: '/governance', label: 'AI Governance', icon: Scale, roles: ['admin', 'doctor'] },
     { to: '/audit', label: 'Audit Log', icon: ScrollText, roles: ['admin'] },
     { to: '/users', label: 'Users & Access', icon: UserCog, roles: ['admin'] },
     { to: '/system', label: 'System & Policy', icon: Settings },
@@ -63,6 +71,7 @@ export default function Layout() {
   const sim = useApi<any>(isStaff ? '/api/simulation' : null)
   const policy = useApi<any>(isStaff ? '/api/settings' : null, ['settings'])
   const bellRef = useRef<HTMLDivElement>(null)
+  const recentToasts = useRef(new Map<string, number>())  // role broadcasts can reach an admin twice → show once
 
   useEffect(() => setOpen(false), [location.pathname])
   useEffect(() => {
@@ -82,7 +91,10 @@ export default function Layout() {
   useLive('notification', (n: any) => {
     const mine = n.user_id === user?.id || n.role === user?.role || (!n.user_id && !n.role) || (user?.role === 'admin' && n.level === 'critical')
     if (mine) {
-      toast({ title: n.title, message: n.message, level: n.level })
+      const key = `${n.title}|${n.message}`
+      const now = Date.now()
+      if (now - (recentToasts.current.get(key) || 0) > 8000) toast({ title: n.title, message: n.message, level: n.level })
+      recentToasts.current.set(key, now)
       notif.reload()
     }
   })
@@ -132,6 +144,12 @@ export default function Layout() {
             )
           })}
         </nav>
+        {isStaff && (
+          <div className="mx-3 mb-2 flex gap-1.5 text-[11px]">
+            <a href="/display" target="_blank" rel="noreferrer" className="flex flex-1 items-center justify-center gap-1 rounded-md bg-white/5 py-1.5 text-slate-400 hover:bg-white/10 hover:text-white"><ExternalLink className="h-3 w-3" />TV display</a>
+            <a href="/kiosk" target="_blank" rel="noreferrer" className="flex flex-1 items-center justify-center gap-1 rounded-md bg-white/5 py-1.5 text-slate-400 hover:bg-white/10 hover:text-white"><ExternalLink className="h-3 w-3" />Kiosk</a>
+          </div>
+        )}
         {installEvt && (
           <button onClick={async () => { installEvt.prompt(); await installEvt.userChoice; setInstallEvt(null) }}
             className="mx-3 mb-2 flex items-center justify-center gap-2 rounded-lg bg-teal-600/20 py-2 text-xs font-medium text-teal-200 ring-1 ring-inset ring-teal-500/30 hover:bg-teal-600/30">
@@ -229,6 +247,7 @@ export default function Layout() {
       </div>
       <CommandPalette open={palette} onClose={() => setPalette(false)} pages={pages} />
       <PasswordModal open={pwOpen} onClose={() => setPwOpen(false)} />
+      {isStaff && <Copilot />}
     </div>
   )
 }
@@ -247,10 +266,10 @@ function PasswordModal({ open, onClose }: { open: boolean; onClose: () => void }
     } catch (e: any) { toast({ title: 'Could not change password', message: e.message, level: 'critical' }) } finally { setBusy(false) }
   }
   return (
-    <Modal open={open} onClose={onClose} title="Change password" footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={busy} disabled={!cur || next.length < 6} onClick={save}>Update</Button></>}>
+    <Modal open={open} onClose={onClose} title="Change password" footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={busy} disabled={!cur || next.length < 8} onClick={save}>Update</Button></>}>
       <div className="space-y-3">
         <Field label="Current password"><input className="input" type="password" value={cur} onChange={(e) => setCur(e.target.value)} /></Field>
-        <Field label="New password (min 6 characters)"><input className="input" type="password" value={next} onChange={(e) => setNext(e.target.value)} /></Field>
+        <Field label="New password (min 8 characters, letters + digits)"><input className="input" type="password" value={next} onChange={(e) => setNext(e.target.value)} /></Field>
       </div>
     </Modal>
   )

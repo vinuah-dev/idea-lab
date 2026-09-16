@@ -87,11 +87,14 @@ class AppointmentQueueAgent(BaseAgent):
         p = ctx.patient
         if not p:
             return AgentResult(agent=self.key, status="skipped", summary="No patient")
+        risk_adjusted = bool(ctx.blackboard.get("follow_up_days"))
+        days = int(ctx.blackboard.get("follow_up_days") or days)  # readmission-risk-adjusted interval
         doctor = p.primary_doctor or ctx.db.scalar(select(Staff).where(Staff.role == "doctor"))
         dept = doctor.department if doctor else None
         slot = next_free_slot(ctx.db, doctor, (datetime.now() + timedelta(days=days)).replace(hour=10, minute=0), dept.avg_consult_minutes if dept else 15)
         ctx.post(self.key, "follow_up", {"doctor_id": doctor.id, "slot": slot.isoformat()})
-        return AgentResult(agent=self.key, summary=f"Follow-up proposed with {doctor.name} on {slot:%d %b at %H:%M} ({days} days post-discharge).",
+        return AgentResult(agent=self.key, summary=f"Follow-up proposed with {doctor.name} on {slot:%d %b at %H:%M} ({days} days post-discharge"
+                                                   f"{', interval set by readmission risk' if risk_adjusted else ''}).",
                            data={"doctor": doctor.name, "slot": slot.isoformat(), "department_id": dept.id if dept else None})
 
     def act_queue_status(self, ctx: AgentContext) -> AgentResult:

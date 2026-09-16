@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { CalendarClock, CheckCircle2, FlaskConical, HeartPulse, Loader2, Pill, Sparkles } from 'lucide-react'
+import { CalendarClock, CheckCircle2, Eye, FlaskConical, HeartPulse, Loader2, Pill, Printer, Receipt, ShieldCheck, Sparkles } from 'lucide-react'
 import { api } from '../api'
 import { Badge, Button, Card, Empty, Field, Spinner, StatusBadge, useToast } from '../components/ui'
 import { useApi } from '../live'
-import { cls, fmtDateTime } from '../utils'
+import { ago, cls, fmtDateTime, inr } from '../utils'
 
 const CLINICAL = ['General Medicine', 'Cardiology', 'Neurology', 'Orthopedics', 'Pediatrics', 'Obstetrics & Gynecology', 'Pulmonology', 'Oncology', 'General Surgery']
 
@@ -12,6 +12,17 @@ export default function Portal() {
   const { data, loading, reload } = useApi<any>('/api/portal/me', ['appointments', 'diagnostics', 'pharmacy'])
   const [form, setForm] = useState({ department: 'Cardiology', preferred: '', reason: '' })
   const [booking, setBooking] = useState<{ status: string; summary?: string } | null>(null)
+  const bill = useApi<any>('/api/portal/bill', ['billing'])
+  const access = useApi<any[]>('/api/portal/access-log')
+  const [paying, setPaying] = useState(false)
+  const pay = async (amount: number) => {
+    setPaying(true)
+    try {
+      const r = await api('/api/portal/pay', { body: { amount } })
+      toast({ title: `Paid ${inr(r.amount)}`, message: `Demo UPI reference ${r.reference} — no real money was charged.`, level: 'success' })
+      bill.reload()
+    } catch (e: any) { toast({ title: 'Payment failed', message: e.message, level: 'critical' }) } finally { setPaying(false) }
+  }
 
   const book = async () => {
     setBooking({ status: 'running' })
@@ -103,6 +114,40 @@ export default function Portal() {
               <StatusBadge status={r.status} />
             </div>
           ))}
+        </Card>
+
+        <Card title="My bill" icon={<Receipt className="h-4 w-4" />} subtitle={bill.data?.payer_label}>
+          {!bill.data ? <Spinner /> : !bill.data.invoice ? <Empty title="Nothing to pay" hint="Charges appear here automatically after a visit, test or admission" /> : (() => {
+            const s = bill.data.invoice.summary
+            return (
+              <div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="rounded-lg bg-slate-50 p-2"><div className="text-[11px] text-slate-500">Total charges</div><div className="font-semibold tabular-nums">{inr(s.gross)}</div></div>
+                  <div className="rounded-lg bg-emerald-50 p-2"><div className="text-[11px] text-emerald-700">Covered by insurance / scheme</div><div className="font-semibold tabular-nums text-emerald-800">{inr(s.expected_insurance)}</div></div>
+                  <div className="rounded-lg bg-slate-50 p-2"><div className="text-[11px] text-slate-500">Paid so far</div><div className="font-semibold tabular-nums">{inr(s.paid)}</div></div>
+                  <div className={cls('rounded-lg p-2', s.balance > 0 ? 'bg-amber-50' : 'bg-emerald-50')}><div className="text-[11px] text-slate-600">Balance</div><div className="font-semibold tabular-nums">{inr(s.balance)}</div></div>
+                </div>
+                {s.claim_status && <div className="mt-2 text-xs text-slate-600"><ShieldCheck className="mr-1 inline h-3.5 w-3.5 text-emerald-600" />Insurance claim: <StatusBadge status={s.claim_status} /></div>}
+                <div className="mt-3 flex gap-2">
+                  {s.balance > 0 && <Button className="flex-1" loading={paying} onClick={() => pay(s.balance)}>Pay {inr(s.balance)} via UPI (demo)</Button>}
+                  <a href={`/print/invoice/${bill.data.invoice.id}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-teal-700 ring-1 ring-inset ring-teal-200 hover:bg-teal-50"><Printer className="h-4 w-4" />Itemised bill</a>
+                </div>
+              </div>
+            )
+          })()}
+        </Card>
+
+        <Card title="Who accessed my record" icon={<Eye className="h-4 w-4" />} subtitle="Every staff access to your record is logged (DPDP Act 2023 transparency)">
+          {!access.data?.length ? <Empty title="No access recorded yet" /> : (
+            <div className="max-h-56 divide-y divide-slate-100 overflow-y-auto">
+              {access.data.map((a, i) => (
+                <div key={i} className="flex items-center gap-2 py-1.5 text-sm">
+                  <span className="font-medium text-slate-800">{a.actor}</span><Badge>{a.role}</Badge>
+                  <span className="text-xs text-slate-500">{a.action}</span><span className="ml-auto text-[11px] text-slate-400">{ago(a.timestamp)}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
       </div>
       <p className="mt-6 text-center text-xs text-slate-400">Reminders and results are informational. Please consult your doctor for medical advice.</p>

@@ -1,0 +1,274 @@
+{
+  "counts": {
+    "patients": 329,
+    "beds": 108,
+    "staff": 86,
+    "medications": 45,
+    "resources": 48,
+    "active_admissions": 66,
+    "vitals": 411,
+    "surgeries": 17
+  },
+  "nlp": {
+    "n": 48,
+    "accuracy": 0.958,
+    "per_intent": {
+      "admission": "4/4",
+      "emergency": "4/4",
+      "appointment": "4/4",
+      "diagnostics": "3/4",
+      "pharmacy": "4/4",
+      "discharge": "4/4",
+      "staffing": "4/4",
+      "bed_query": "4/4",
+      "optimization": "4/4",
+      "analytics": "4/4",
+      "patient_status": "3/4",
+      "surgery": "4/4"
+    },
+    "avg_ms": 13.26,
+    "intents": 14
+  },
+  "forecast": {
+    "days": 180,
+    "metrics": {
+      "admissions": {
+        "mape": 9.74,
+        "naive_seasonal_mape": 8.53,
+        "params": {
+          "method": "holt-winters-additive",
+          "alpha": 0.1,
+          "beta": 0.05,
+          "gamma": 0.3,
+          "season": 7
+        }
+      },
+      "er_visits": {
+        "mape": 6.71,
+        "naive_seasonal_mape": 8.71,
+        "params": {
+          "method": "holt-winters-additive",
+          "alpha": 0.1,
+          "beta": 0.05,
+          "gamma": 0.3,
+          "season": 7
+        }
+      },
+      "opd_visits": {
+        "mape": 5.46,
+        "naive_seasonal_mape": 6.66,
+        "params": {
+          "method": "holt-winters-additive",
+          "alpha": 0.1,
+          "beta": 0.01,
+          "gamma": 0.3,
+          "season": 7
+        }
+      },
+      "bed_occupancy": {
+        "mape": 3.07,
+        "naive_seasonal_mape": 4.14,
+        "params": {
+          "method": "holt-winters-additive",
+          "alpha": 0.35,
+          "beta": 0.01,
+          "gamma": 0.3,
+          "season": 7
+        }
+      },
+      "icu_occupancy": {
+        "mape": 2.13,
+        "naive_seasonal_mape": 2.33,
+        "params": {
+          "method": "holt-winters-additive",
+          "alpha": 0.2,
+          "beta": 0.01,
+          "gamma": 0.3,
+          "season": 7
+        }
+      }
+    }
+  },
+  "los": {
+    "mae_days": 2.07,
+    "r2": 0.36,
+    "baseline_mae_days": 2.62,
+    "interval_coverage": 0.777,
+    "train_rows": 3200,
+    "test_rows": 800
+  },
+  "los_importances": {
+    "ward type": 0.301,
+    "acuity": 0.279,
+    "age": 0.21,
+    "comorbidities": 0.185,
+    "emergency admission": 0.025
+  },
+  "roster": {
+    "solver": "Google OR-Tools CP-SAT",
+    "status": "OPTIMAL",
+    "required_slots": 392,
+    "shortfall": 53,
+    "coverage_pct": 86.5,
+    "wall_ms": 1067.4,
+    "variables": 1981,
+    "staff": 77,
+    "shifts": 354,
+    "min_nights": 0,
+    "max_nights": 2
+  },
+  "beds": {
+    "free_beds": 32,
+    "patients": 8,
+    "placed": 8,
+    "solver": "Google OR-Tools CP-SAT",
+    "status": "OPTIMAL",
+    "wall_ms": 11.5,
+    "feasible_pairs": 70
+  },
+  "ot": {
+    "status": "OPTIMAL",
+    "movable": 5,
+    "moved": 5,
+    "before": {
+      "makespan": "20:45",
+      "overtime_minutes": 75,
+      "conflicts": 1
+    },
+    "after": {
+      "makespan": "11:15",
+      "overtime_minutes": 0,
+      "conflicts": 0
+    },
+    "wall_ms": 49.9
+  },
+  "v2": {
+    "agents": 11,
+    "intents": 14,
+    "nlp_card": {
+      "cv_accuracy": 0.743,
+      "cv_std": 0.035,
+      "held_out_accuracy": 0.958,
+      "held_out_size": 24,
+      "training_sentences": 311
+    },
+    "readmission": {
+      "auc": 0.721,
+      "lace_only_auc": 0.694,
+      "brier": 0.0934,
+      "base_rate": 0.111,
+      "train_rows": 4000,
+      "test_rows": 1000,
+      "fairness": {
+        "female": 0.709,
+        "male": 0.738
+      }
+    },
+    "twin": {
+      "scenario": "+50% ED arrivals for 72 h",
+      "replications": 20,
+      "wall_ms": 465,
+      "baseline": {
+        "boarding_patient_hours": 132.55,
+        "max_boarding": 7.05,
+        "p90_boarding_hours": 10.762,
+        "peak_critical_occupancy": 0.985,
+        "peak_general_occupancy": 1.0,
+        "ed_saturated_hours": 14.45,
+        "electives_cancelled": 13.1,
+        "ed_arrivals": 179.6
+      },
+      "surge": {
+        "boarding_patient_hours": 283.15,
+        "max_boarding": 9.4,
+        "p90_boarding_hours": 14.229,
+        "peak_critical_occupancy": 0.99,
+        "peak_general_occupancy": 1.0,
+        "ed_saturated_hours": 63.9,
+        "electives_cancelled": 18.95,
+        "ed_arrivals": 276.0
+      },
+      "capacity": {
+        "critical": 26,
+        "general": 71
+      },
+      "recommendations": [
+        {
+          "title": "Defer elective admissions",
+          "impact": 0.561
+        },
+        {
+          "title": "Open 16 surge ward beds",
+          "impact": 0.324
+        }
+      ],
+      "headline": "Over the next 72 h, ED boarding is expected to be 283 patient-hours (+151 vs baseline); peak critical-care occupancy 99%, peak ward occupancy 100%. Best single lever: defer elective admissions (\u221256% on the pressure index)."
+    },
+    "dispatch": {
+      "fleet": 8,
+      "localities": 18,
+      "sample_etas": [
+        {
+          "locality": "Sitabuldi",
+          "km": 2.1,
+          "eta_min": 4.2
+        },
+        {
+          "locality": "Dharampeth",
+          "km": 1.9,
+          "eta_min": 3.9
+        },
+        {
+          "locality": "Sadar",
+          "km": 4.3,
+          "eta_min": 7.5
+        },
+        {
+          "locality": "Civil Lines",
+          "km": 3.6,
+          "eta_min": 6.3
+        },
+        {
+          "locality": "Manish Nagar",
+          "km": 7.0,
+          "eta_min": 11.4
+        },
+        {
+          "locality": "Wardhaman Nagar",
+          "km": 8.5,
+          "eta_min": 13.8
+        }
+      ],
+      "mean_eta_min": 7.8
+    },
+    "billing": {
+      "invoices": 67,
+      "gross_billed": 1174376.0,
+      "outstanding": 354433.4,
+      "payer_mix": {
+        "pmjay": 26,
+        "self": 32,
+        "private": 9
+      },
+      "pmjay_adjustments": 356280.0,
+      "by_category": {
+        "room": 712700.0,
+        "consultation": 216500.0,
+        "nursing": 164300.0,
+        "diagnostic": 57300.0,
+        "pharmacy": 23576.0
+      },
+      "invoice_rows": 67,
+      "estimate_icu": {
+        "los_days": 11.8,
+        "low": 118700.0,
+        "expected": 229100.0,
+        "high": 325000.0,
+        "pmjay_covered": 53100.0
+      }
+    },
+    "beds": 108,
+    "tests": 55,
+    "screens": 29
+  }
+}

@@ -21,6 +21,8 @@ AUTONOMY_MODES = {
 
 # actions a human must always sign off unless the mode is 'balanced' and the agent itself marked them auto
 ALWAYS_REVIEW = {"create_prescription", "discharge_patient", "apply_roster", "reassign_staff"}
+# life-critical dispatch never waits in an approval queue, whatever the autonomy mode
+TIME_CRITICAL = {"dispatch_ambulance"}
 
 
 def get_setting(db: Session, key: str):
@@ -46,6 +48,8 @@ def set_setting(db: Session, key: str, value) -> None:
 
 def needs_approval(mode: str, action) -> bool:
     """Apply the configured autonomy policy to an agent's proposed action."""
+    if action.action_type in TIME_CRITICAL:
+        return False
     if mode == "supervised":
         return True
     if mode == "autonomous":

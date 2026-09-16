@@ -1,0 +1,180 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  body { margin: 0; padding: 24px; background: #ffffff; font-family: "Segoe UI", Arial, sans-serif; }
+  #d { display: inline-block; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+</head>
+<body>
+<div id="d"></div>
+<script>
+const D = {
+arch: `flowchart TB
+  subgraph C["Client layer"]
+    direction LR
+    C1["Patient portal PWA"] ~~~ C2["Doctor / nurse dashboards"] ~~~ C3["Admin console"] ~~~ C4["AI Agent Console"]
+  end
+  subgraph A["Application layer"]
+    direction LR
+    A1["FastAPI REST gateway"] ~~~ A2["JWT authentication"] ~~~ A3["Role-based access control"] ~~~ A4["WebSocket event bus"]
+  end
+  subgraph O["AI orchestration layer"]
+    direction LR
+    O1["NLP understanding<br/>Claude or TF-IDF + LR"] --> O2["Planner<br/>intent templates → DAG"] --> O3["Execution<br/>shared blackboard"] --> O4["Conflict resolution"] --> O5["Human-in-the-loop gate"]
+  end
+  subgraph G["Specialised agents"]
+    direction LR
+    G1["Bed Mgmt"] ~~~ G2["Appointment & Queue"] ~~~ G3["Staff Scheduling"] ~~~ G4["Diagnostics"] ~~~ G5["Pharmacy"]
+    G6["Patient Care"] ~~~ G7["Emergency"] ~~~ G8["Resource Optimizer"] ~~~ G9["Notification"]
+  end
+  subgraph S["Hospital services & algorithms"]
+    direction LR
+    S1["OR-Tools CP-SAT"] ~~~ S2["NEWS2 triage"] ~~~ S3["M/M/c queueing"] ~~~ S4["Holt-Winters"] ~~~ S5["LOS ML model"] ~~~ S6["Clinical KB"]
+  end
+  subgraph I["Integration layer"]
+    direction LR
+    I1["HIS / EHR APIs"] ~~~ I2["Lab system"] ~~~ I3["Pharmacy system"] ~~~ I4["SMS / e-mail"] ~~~ I5["IoT / MQTT (future)"]
+  end
+  subgraph DL["Data layer"]
+    direction LR
+    D1[("PostgreSQL / SQLite")] ~~~ D2["Patients · Resources · Workflows · Agent traces · Audit · Analytics"]
+  end
+  C --> A --> O --> G --> S --> I --> DL`,
+pipeline: `flowchart LR
+  i["(i) Intake<br/>console · ER desk · portal · simulator"] --> ii["(ii) NLP<br/>intents + entities"] --> iii["(iii) Workflow<br/>identification"] --> iv["(iv) Agent selection<br/>DAG plan"] --> v["(v) Coordinated<br/>execution"]
+  v --> vi["(vi) Constraint &<br/>conflict analysis"] --> vii["(vii) Recommendations<br/>& actions"] --> viii{"(viii) Safety<br/>critical?"}
+  viii -- "no" --> ix["(ix) Auto-execute"]
+  viii -- "yes" --> H["Human approval<br/>approve · modify · reject"] --> ix
+  ix --> x["(x) Log · audit ·<br/>notify · live trace"]`,
+sequence: `sequenceDiagram
+  autonumber
+  actor U as Staff member
+  participant O as Orchestrator
+  participant C as Patient Care Agent
+  participant B as Bed Agent
+  participant S as Staff Agent
+  participant R as Resource Optimizer
+  participant N as Notification Agent
+  actor H as Doctor
+  U->>O: "Patient needs admission and requires ICU monitoring"
+  O->>O: NLP → admission, bed_type=icu, features=[ventilator, monitor]
+  O->>C: resolve_patient
+  C-->>O: patient (provisional registration)
+  O->>B: find_beds
+  B->>R: PROPOSE ranked ICU beds
+  O->>S: find_staff
+  S->>R: PROPOSE doctor + nurse
+  O->>R: allocate
+  R->>R: CP-SAT vs waiting patients + LOS prediction
+  R-->>O: reserve_bed (auto) + admit_patient (approval)
+  O->>O: conflict check
+  O->>N: dispatch
+  N-->>H: approval request
+  H->>O: approve (optionally change bed / doctor)
+  O->>O: execute · audit · live update`,
+er: `erDiagram
+  DEPARTMENT ||--o{ STAFF : employs
+  DEPARTMENT ||--o{ WARD : owns
+  WARD ||--o{ BED : contains
+  PATIENT ||--o{ ADMISSION : has
+  BED ||--o{ ADMISSION : hosts
+  STAFF ||--o{ ADMISSION : treats
+  PATIENT ||--o{ APPOINTMENT : books
+  PATIENT ||--o{ DIAGNOSTIC_ORDER : undergoes
+  RESOURCE ||--o{ DIAGNOSTIC_ORDER : performs
+  PATIENT ||--o{ PRESCRIPTION : receives
+  MEDICATION ||--o{ PRESCRIPTION : dispensed
+  PATIENT ||--o{ EMERGENCY_CASE : presents
+  PATIENT ||--o{ VITAL_SIGN : observed
+  PATIENT ||--o{ SURGERY : undergoes
+  RESOURCE ||--o{ SURGERY : "theatre"
+  PATIENT ||--o{ CARE_TASK : pathway
+  AGENT_REQUEST ||--o{ APPROVAL : proposes
+  USER ||--o{ AGENT_REQUEST : submits
+  STAFF ||--o{ SHIFT : works
+  PATIENT { int id PK string mrn string name int age string status }
+  BED { int id PK string code string status json features }
+  ADMISSION { int id PK int patient_id FK int bed_id FK string acuity }
+  VITAL_SIGN { int id PK int patient_id FK int news2 }
+  SURGERY { int id PK int ot_id FK datetime start int duration }
+  AGENT_REQUEST { int id PK text text json plan json trace string status }
+  APPROVAL { int id PK string action_type json payload string risk_level }`,
+dfd0: `flowchart LR
+  P(["Patient"]) -- "booking, portal" --> SYS(("MedOrchestra<br/>Multi-Agent System"))
+  ST(["Clinical & support staff"]) -- "requests, observations, decisions" --> SYS
+  AD(["Administrator"]) -- "policy, rosters, oversight" --> SYS
+  SYS -- "confirmations, reports" --> P
+  SYS -- "recommendations, alerts, approvals" --> ST
+  SYS -- "analytics, audit" --> AD
+  EXT[["HIS / Lab / Pharmacy / SMS"]] <-- "integration" --> SYS`,
+dfd1: `flowchart LR
+  R1["1.0 Intake & NLP"] --> R2["2.0 Planning"] --> R3["3.0 Agent execution"] --> R4["4.0 Conflict resolution"] --> R5{"5.0 HITL gate"}
+  R5 -- "auto" --> R6["6.0 Action execution"]
+  R5 -- "approval" --> AP[("Approvals")] --> R6
+  R6 --> R7["7.0 Notify & audit"]
+  R3 <--> D1[("Patients")]
+  R3 <--> D2[("Beds & resources")]
+  R3 <--> D3[("Staff & shifts")]
+  R3 <--> D4[("Orders, Rx, surgeries")]
+  R6 --> D1 & D2 & D3 & D4
+  R7 --> D5[("Notifications / audit log")]`,
+usecase: `flowchart TB
+  subgraph SA["Administrator"]
+    direction LR
+    A(("Admin")) --- U1["Monitor command center"] & U2["Approve rosters"] & U3["Set autonomy policy"] & U4["Manage users"]
+  end
+  subgraph SD["Doctor"]
+    direction LR
+    D(("Doctor")) --- U5["Ask agents in natural language"] & U6["Approve admissions / orders / surgery"] & U7["Review patient journey"]
+  end
+  subgraph SN["Nurse"]
+    direction LR
+    N(("Nurse")) --- U8["Record observations (NEWS2)"] & U9["Register ER case"] & U10["Update bed status"]
+  end
+  subgraph SR["Reception & Lab"]
+    direction LR
+    R(("Reception")) --- U11["Register patients"] & U12["Manage OPD queue"]
+    L(("Lab")) --- U13["Report results"]
+  end
+  subgraph SP["Pharmacy & Patient"]
+    direction LR
+    PH(("Pharmacist")) --- U14["Verify / dispense Rx"]
+    PT(("Patient")) --- U15["Book appointment via agent"] & U16["View reports & medicines"]
+  end
+  SA ~~~ SR
+  SD ~~~ SP`,
+hitl: `flowchart TB
+  A["Agent proposes action<br/>type · payload · risk · rationale"] --> P{"Autonomy policy<br/>supervised · balanced · autonomous"}
+  P -- "low risk / reversible" --> X["Execute automatically"]
+  P -- "safety-critical" --> Q["Approval queue<br/>routed to authorised roles"]
+  Q --> H{"Human decision"}
+  H -- "approve" --> X
+  H -- "approve with changes<br/>(bed, doctor, time, dose)" --> X
+  H -- "reject" --> RB["Roll back holds<br/>cancel pending tasks"]
+  X --> L["Audit log · notifications · live update"]
+  RB --> L`,
+escalation: `flowchart LR
+  V["Bedside observations<br/>HR · RR · SpO2 · BP · T · ACVPU · O2"] --> S["NEWS2 score"]
+  S --> A{"Score"}
+  A -- "0" --> F1["12-hourly obs"]
+  A -- "1-4" --> F2["4-6-hourly obs<br/>nurse assessment"]
+  A -- "5-6 or single 3" --> F3["Hourly obs<br/>urgent doctor review"]
+  A -- "7+" --> F4["Emergency response<br/>alert doctors & nurses"]
+  F4 --> T["Orchestrator request:<br/>Transfer to ICU"] --> AG["Bed + Staff + Optimizer agents<br/>ICU bed · team · LOS prediction"] --> AP["Doctor approval"]`
+};
+const params = new URLSearchParams(location.search);
+const key = params.get('d') || 'arch';
+const THEMES = {
+  teal: { primaryColor: '#ccfbf1', primaryBorderColor: '#0f766e', primaryTextColor: '#0f172a', lineColor: '#475569', clusterBkg: '#f8fafc', clusterBorder: '#94a3b8' },
+  rbu: { primaryColor: '#E9EFF7', primaryBorderColor: '#072A52', primaryTextColor: '#072A52', lineColor: '#072A52', clusterBkg: '#FFF6F0', clusterBorder: '#EF6019' },
+};
+mermaid.initialize({ startOnLoad: false, theme: 'base', securityLevel: 'loose', flowchart: { htmlLabels: true, curve: 'basis', useMaxWidth: false },
+  sequence: { useMaxWidth: false }, er: { useMaxWidth: false },
+  themeVariables: { ...THEMES[params.get('t') || 'teal'], fontSize: '16px', fontFamily: 'Segoe UI, Arial' } });
+mermaid.render('g', D[key]).then(({ svg }) => { document.getElementById('d').innerHTML = svg; document.title = 'done'; });
+</script>
+</body>
+</html>

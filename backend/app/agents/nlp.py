@@ -30,12 +30,14 @@ INTENTS = {
     "analytics": "Reports, forecasts, bottleneck analysis",
     "patient_status": "Track where a patient is in their care journey",
     "surgery": "Schedule surgery / operating-theatre coordination",
+    "billing": "Bills, cost estimates, insurance and PM-JAY claims",
+    "ambulance": "Dispatch or track an ambulance (108 call)",
 }
 
 _TRAINING: dict[str, list[str]] = {
     "admission": [
         "patient needs admission and requires icu monitoring", "admit the patient to icu", "admit patient to general ward",
-        "please admit ramesh kumar for observation", "patient requires hospitalization", "need to admit a 65 year old for pneumonia",
+        "please admit the patient for observation", "patient requires hospitalization", "need to admit a 65 year old for pneumonia",
         "admit him to the cardiac unit", "shift patient to icu from ward", "transfer patient to hdu bed",
         "arrange admission for post operative patient", "we need an icu bed with ventilator for this patient",
         "patient must be admitted for dengue monitoring", "inpatient admission required", "admit to isolation ward",
@@ -51,14 +53,21 @@ _TRAINING: dict[str, list[str]] = {
         "burn victim arrived", "suspected sepsis patient in casualty with high fever and low bp", "emergency triage needed",
         "patient bleeding heavily after fall", "chest pain sweating since 30 minutes", "cardiac arrest resuscitation needed",
         "poisoning case brought to emergency", "mass casualty incident three patients arriving", "urgent: child not breathing properly",
+        "patient with severe chest pain just walked into casualty", "unresponsive patient brought in by relatives",
+        "sudden loss of consciousness in the waiting area", "high fever with very low blood pressure in the er",
+        "acute breathlessness with low oxygen saturation", "major trauma after a fall from height", "child having continuous fits in the emergency room",
+        "vomiting blood and feeling faint", "sixty year old man with crushing chest pain and sweating",
     ],
     "appointment": [
         "book an appointment with a cardiologist tomorrow", "schedule opd consultation for knee pain", "i want to see a doctor",
-        "book appointment with dr sharma at 10 am", "reschedule my appointment to friday", "need a neurology consultation",
+        "book appointment with the physician at 10 am", "reschedule my appointment to friday", "need a neurology consultation",
         "book a slot with orthopedic doctor", "schedule follow up visit next week", "appointment for fever and cough today",
         "can i get an appointment with gynecologist", "book pediatrician for my child", "add patient to general medicine queue",
         "consultation with oncologist", "cancel my appointment", "opd booking for diabetes checkup", "follow-up after discharge in 7 days",
         "book checkup with physician this evening", "register patient in cardiology opd",
+        "i would like to consult a surgeon about my hernia", "outpatient visit with the orthopaedic doctor next monday",
+        "opd slot with the general surgeon", "need a check-up with the chest physician", "fix a consultation for my mother tomorrow",
+        "reschedule the patient's opd visit to next week", "can the patient see the cardiologist on thursday", "book a review visit in the clinic",
     ],
     "diagnostics": [
         "order cbc and chest x-ray", "schedule mri brain for patient", "patient needs ct scan urgently", "order blood tests",
@@ -66,6 +75,10 @@ _TRAINING: dict[str, list[str]] = {
         "lab test for dengue ns1", "get abg done", "blood culture and crp", "when will the ct scan be available",
         "status of lab reports", "radiology booking for x-ray", "order lipid profile and hba1c", "urine routine test",
         "check if mri machine is free", "diagnostic workup for chest pain", "pending lab results for patient",
+        "send blood for a complete blood count", "get a ct scan of the abdomen done", "please do an x-ray of the knee",
+        "check haemoglobin and platelet count", "arrange an mri of the spine", "repeat the kidney function test tomorrow",
+        "urgent ultrasound of the abdomen", "collect a blood culture before antibiotics", "draw blood for a thyroid profile",
+        "investigations needed: serum electrolytes and ecg",
     ],
     "pharmacy": [
         "prescribe paracetamol 500mg", "check stock of insulin", "is amoxicillin available", "medicine stock low alert",
@@ -73,38 +86,74 @@ _TRAINING: dict[str, list[str]] = {
         "which medicines are running low", "reorder antibiotics", "verify prescription for allergies",
         "start iv ceftriaxone", "give ondansetron for vomiting", "pharmacy inventory status", "prescribe metformin twice daily",
         "add aspirin 75 mg", "medication list for patient", "expiring medicines this month",
+        "start the patient on intravenous antibiotics", "what is the right dose of amoxicillin", "stop aspirin and start clopidogrel",
+        "is insulin available in the pharmacy", "check for drug allergies before giving ceftriaxone", "we are running out of heparin",
+        "give pantoprazole 40 mg once daily",
     ],
     "discharge": [
         "discharge the patient", "plan discharge for tomorrow", "patient is fit for discharge", "prepare discharge summary",
-        "discharge ramesh from ward", "release icu bed after discharge", "which patients can be discharged today",
+        "discharge the patient from the ward", "release icu bed after discharge", "which patients can be discharged today",
         "discharge with follow up in one week", "patient going home today", "complete discharge checklist",
+        "can the patient go home tomorrow", "start the discharge process for bed 12", "prepare to send the patient home",
+        "is the patient ready for discharge", "sign the discharge papers",
     ],
     "staffing": [
         "which doctors are available now", "need two more nurses in icu", "who is on duty tonight", "generate staff roster for next week",
         "assign a nurse to bed 12", "find an available cardiologist", "staff shortage in emergency", "doctor workload today",
         "create shift schedule", "on call neurologist", "reassign nurses to balance workload", "night shift planning",
         "how many nurses are on duty", "optimize nurse scheduling",
+        "which consultants are on call tonight", "the icu is short of nurses", "move one nurse from the general ward to emergency",
+        "prepare the duty roster for next month", "how many doctors are working in emergency now", "nurse workload is too high in ward b",
+        "arrange a relief nurse for the night shift", "list the staff on leave today", "call in the on-call anaesthetist",
     ],
     "bed_query": [
         "how many icu beds are available", "bed availability", "is there any free ventilator bed", "show bed occupancy",
         "which wards have free beds", "available isolation beds", "icu occupancy right now", "free beds in general ward",
         "how many beds are occupied", "any hdu bed free", "status of beds", "check bed availability in pediatric ward",
+        "is any icu bed vacant", "show me the empty beds", "how full is the hdu", "number of free beds in maternity",
+        "are there beds for new admissions",
     ],
     "optimization": [
         "optimize bed allocation", "rebalance resources across wards", "optimize resource utilization",
         "allocate beds to waiting patients optimally", "reduce bottlenecks", "improve patient flow", "optimize icu usage",
         "suggest efficient resource allocation", "balance ward load", "optimize operating room schedule",
         "assign all pending admissions to beds", "resource optimization run",
+        "reduce emergency department boarding", "place all waiting patients in the best available beds", "balance workload between wards",
+        "improve bed turnover", "optimise the use of ventilators", "reassign beds to cut waiting time", "run the optimiser for pending admissions",
     ],
     "analytics": [
         "show hospital occupancy report", "forecast admissions for next week", "predict icu demand", "average waiting time today",
         "department workload analysis", "show trends of er visits", "generate daily report", "predict bed demand",
         "what are the bottlenecks", "resource utilization statistics", "monthly performance summary", "show kpis",
+        "what if emergency arrivals increase by 50 percent", "simulate a mass casualty incident with 20 patients",
+        "what happens if four icu beds are closed", "run a what-if scenario for a dengue surge", "digital twin simulation for the next three days",
+        "what if 30% of nurses are absent tomorrow", "can we cope with a surge in er visits this weekend",
+        "how many admissions did we have last week", "what was the average waiting time yesterday", "compare er visits this month with last month",
+        "which department is the busiest", "export the monthly statistics", "trend of icu occupancy over 90 days", "expected admissions tomorrow",
+    ],
+    "billing": [
+        "what is the bill for this patient", "show the invoice for this patient", "how much does the patient owe", "generate the final bill",
+        "tell me the amount due on the invoice", "print the itemised bill", "has the insurer approved the claim",
+        "collect a deposit from the family", "pm-jay package for a c-section", "is the tpa pre-authorisation approved",
+        "submit the pm-jay claim for the patient", "is the patient covered under ayushman bharat", "check insurance coverage",
+        "estimate the cost of an icu admission", "how much will a knee replacement cost", "cost estimate for five days in general ward",
+        "pending payments today", "billing clearance before discharge", "record a payment for the patient", "insurance claim status",
+        "outstanding bills", "what is the package rate for appendectomy under pmjay", "revenue collected today", "patient ka bill kitna hua",
+    ],
+    "ambulance": [
+        "send an ambulance to sitabuldi", "108 call from dharampeth with chest pain", "accident at wardhaman nagar need an ambulance",
+        "dispatch an ambulance for an unconscious man at sadar", "need an ambulance at manish nagar urgently", "where is the ambulance",
+        "track ambulance amb-03", "road traffic accident on hingna road send help", "pregnant woman in labour at itwari needs an ambulance",
+        "elderly man collapsed at home in pratap nagar send an ambulance", "how many ambulances are available", "ambulance fleet status",
+        "call an ambulance for a snake bite victim at wadi", "send the nearest ambulance to kamptee",
     ],
     "patient_status": [
-        "where is patient ramesh", "status of patient mrn-1002", "track patient journey", "what is pending for this patient",
+        "where is the patient right now", "status of patient mrn-1002", "track patient journey", "what is pending for this patient",
         "has the patient completed diagnostics", "show patient timeline", "patient current location", "care plan status",
         "is the patient admitted", "what is the next step for patient",
+        "have all the investigations been completed", "are the reports of this patient ready", "what is pending before transfer to the ward",
+        "update me on the patient's progress", "which step of the pathway is the patient at", "is the patient still in the emergency department",
+        "track the patient's journey through the hospital",
     ],
     "surgery": [
         "schedule appendectomy for the patient tomorrow", "book operation theatre for knee replacement", "patient needs emergency laparotomy",
@@ -156,13 +205,17 @@ KEYWORD_INTENTS = {  # regexes (word-bounded) that add secondary intents
     "appointment": [r"appointment", r"book a slot", r"consultation", r"opd", r"follow[ -]up"],
     "staffing": [r"roster", r"on duty", r"nurses", r"shift schedule", r"staff"],
     "optimization": [r"optimi[sz]e (?:the )?(?:bed|resource|allocation|icu|ward)s?", r"rebalance"],
-    "analytics": [r"forecast", r"predict\w*", r"report", r"trends?", r"bottlenecks?"],
+    "analytics": [r"forecast", r"predict\w*", r"report", r"trends?", r"bottlenecks?", r"what[- ]if", r"simulat\w*"],
     "surgery": [r"surgery", r"operation theatre", r"operating (?:room|theatre)s?", r"theatre", r"ot (?:slot|schedule|list)"],
+    "billing": [r"bill(?:ing|s)?", r"invoice", r"insurance", r"claims?", r"pm-?jay", r"ayushman", r"cost estimate", r"payments?"],
+    "ambulance": [r"(?:send|dispatch|need|call|book)\s+(?:an?\s+|the\s+(?:nearest\s+)?)?ambulance", r"108", r"ambulance\s+(?:to|at|for)"],
 }
 # hospital-level questions must not spawn patient-level workflows from incidental keywords
-_SUPPRESS = {"analytics": {"admission", "appointment", "discharge", "pharmacy", "surgery"}, "bed_query": {"admission", "discharge", "surgery"},
+_SUPPRESS = {"analytics": {"admission", "appointment", "discharge", "pharmacy", "surgery", "emergency"}, "bed_query": {"admission", "discharge", "surgery"},
              "optimization": {"admission", "appointment"}, "staffing": {"optimization", "admission", "surgery"},
-             "appointment": {"surgery"}, "surgery": {"optimization", "appointment"}}
+             "appointment": {"surgery"}, "surgery": {"optimization", "appointment"},
+             "billing": {"admission", "discharge", "surgery", "appointment", "analytics", "pharmacy"},
+             "ambulance": {"emergency", "admission", "staffing", "bed_query"}}
 
 
 def detect_intents(text: str) -> tuple[list[dict], float]:
@@ -371,14 +424,92 @@ def extract_entities(text: str, patient_names: list[tuple[int, str, str]] | None
         ent["horizon_days"] = 30
     if re.search(r"ambulance", t):
         ent["arrival_mode"] = "ambulance"
+    from ..services.dispatch import find_locality  # local import keeps NLP import-light
+    loc = find_locality(text)
+    if loc:
+        ent["locality"] = loc[0]
+    # digital-twin scenario parameters ("what if ER arrivals rise by 50%", "bus accident with 18 casualties")
+    surge = re.search(r"(\d{1,3})\s*(?:%|percent|per cent)", t)
+    if surge and re.search(r"increase|surge|more|rise|jump|spike|up by|badh", t) and not re.search(r"nurses?|staff", t[surge.end():surge.end() + 25]):
+        ent["surge_pct"] = int(surge.group(1))
+    mci = re.search(r"(\d{1,3})\s+(?:patients|casualties|victims|injured)", t)
+    if mci and re.search(r"mass casualty|accident|incident|disaster|blast|collapse", t):
+        ent["mci_patients"] = int(mci.group(1))
+    closed = re.search(r"(\d{1,2}|two|three|four|five|six)\s+icu\s+beds?\s+(?:are\s+|is\s+)?(?:close|closed|shut)", t)
+    if closed:
+        ent["closed_critical_beds"] = int({"two": 2, "three": 3, "four": 4, "five": 5, "six": 6}.get(closed.group(1), closed.group(1)))
+    absent = re.search(r"(\d{1,2})\s*(?:%|percent)\s+(?:of\s+)?(?:the\s+)?(?:nurses|staff|nursing staff)\s+(?:are\s+)?(?:absent|off|on leave|on strike|sick)", t)
+    if absent:
+        ent["staff_absent_pct"] = int(absent.group(1))
     return ent
 
 
+# Held-out phrasings (never used for training), including Hinglish that is normalised first.
+HELD_OUT = [
+    ("Kindly arrange an ICU bed for the patient in ward 4", "admission"),
+    ("Patient brought in after a fall, bleeding from the head", "emergency"),
+    ("Can I get a slot with the orthopaedic surgeon on Monday?", "appointment"),
+    ("Please run a thyroid profile and CBC", "diagnostics"),
+    ("Is there enough paracetamol in stock?", "pharmacy"),
+    ("Mr Shah is fit to go home today", "discharge"),
+    ("Who are the nurses on duty in the ER tonight?", "staffing"),
+    ("Any free beds in the isolation ward?", "bed_query"),
+    ("Rebalance patients across the wards to reduce crowding", "optimization"),
+    ("Show me last month's occupancy trend", "analytics"),
+    ("Has Rohan Mehta finished his tests?", "patient_status"),
+    ("Book theatre time for a hip replacement on Friday", "surgery"),
+    ("How much is the patient's hospital bill so far?", "billing"),
+    ("Accident near Sadar flyover, send an ambulance", "ambulance"),
+    ("What if ICU demand doubles this weekend?", "analytics"),
+    ("ICU mein kitne bed khali hain?", "bed_query"),
+    ("Rohan Mehta ka bill kitna hua?", "billing"),
+    ("Sitabuldi mein accident hua hai, ambulance bhejo", "ambulance"),
+    ("60 saal ka aadmi, seene mein dard, BP 90/60", "emergency"),
+    ("Kal subah 10 baje cardiology mein appointment laga do", "appointment"),
+    ("Rohan Mehta ko ICU mein shift karo", "admission"),
+    ("Rohan Mehta ki chhutti kar do", "discharge"),
+    ("CBC aur chest x-ray ki jaanch karao", "diagnostics"),
+    ("Aaj raat kaun duty pe hai?", "staffing"),
+]
+
+
+@lru_cache(maxsize=1)
+def model_card() -> dict:
+    """Leakage-free cross-validation (all paraphrase variants of a sentence share a fold) + held-out accuracy."""
+    from sklearn.base import clone
+    from sklearn.model_selection import GroupKFold, cross_val_score
+
+    from ..services.hinglish import normalize
+
+    X, y, groups, gid = [], [], [], 0
+    for intent, samples in _TRAINING.items():
+        for s in samples:
+            for f in _FILLERS[:3]:
+                X.append(f + s)
+                y.append(intent)
+                groups.append(gid)
+            gid += 1
+    scores = cross_val_score(clone(_model()), X, y, groups=groups, cv=GroupKFold(n_splits=5))
+    misses = []
+    for text, expected in HELD_OUT:
+        got = classify(normalize(text)["text"])[0]["name"]
+        if got != expected:
+            misses.append({"text": text, "expected": expected, "predicted": got})
+    return {"model": "TF-IDF (word 1–2-grams + char 3–5-grams) + multinomial logistic regression", "intents": len(INTENTS),
+            "training_sentences": gid, "cv_accuracy": round(float(scores.mean()), 3), "cv_std": round(float(scores.std()), 3),
+            "held_out_size": len(HELD_OUT), "held_out_accuracy": round(1 - len(misses) / len(HELD_OUT), 3), "misses": misses,
+            "method": "5-fold GroupKFold (paraphrase variants grouped → no leakage); held-out set includes Hinglish normalised by rules"}
+
+
 def understand_local(text: str, patient_names=None, medications=None) -> dict:
-    intents, conf = detect_intents(text)
+    entities = extract_entities(text, patient_names, medications)
+    clean = text
+    if entities.get("patient_name"):  # entity masking: a patient's name must not sway the intent classifier
+        clean = re.sub(re.escape(entities["patient_name"]), "the patient", clean, flags=re.I)
+    intents, conf = detect_intents(clean)
     return {
         "engine": "Local NLP (TF-IDF + Logistic Regression)",
         "intents": intents,
         "confidence": conf,
-        "entities": extract_entities(text, patient_names, medications),
+        "entities": entities,
     }

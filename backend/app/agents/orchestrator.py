@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 import time
 from datetime import datetime
@@ -28,10 +29,13 @@ from ..events import bus
 from ..models import AgentRequest, Approval, Medication, Patient, Staff, User
 from ..security import APPROVER_ROLES
 from ..services.activity import log_audit
+from ..services.hinglish import normalize, resolve_pronoun
 from ..services.settings_store import get_setting, needs_approval
+from .ambulance_agent import AmbulanceDispatchAgent
 from .appointment_agent import AppointmentQueueAgent
 from .base import AgentContext, AgentResult, ProposedAction
 from .bed_agent import BedManagementAgent
+from .billing_agent import BillingInsuranceAgent
 from .care_agent import PatientCareAgent
 from .diagnostic_agent import DiagnosticCoordinationAgent
 from .emergency_agent import EmergencySupportAgent
@@ -47,7 +51,8 @@ log = logging.getLogger("medorchestra.orchestrator")
 
 AGENTS = {a.key: a for a in [
     BedManagementAgent(), AppointmentQueueAgent(), StaffSchedulingAgent(), DiagnosticCoordinationAgent(),
-    PharmacyAgent(), PatientCareAgent(), EmergencySupportAgent(), ResourceOptimizationAgent(), NotificationAgent(),
+    PharmacyAgent(), PatientCareAgent(), EmergencySupportAgent(), ResourceOptimizationAgent(), BillingInsuranceAgent(),
+    AmbulanceDispatchAgent(), NotificationAgent(),
 ]}
 
 # intent -> [(step id "agent.action", params, depends_on)]
@@ -69,6 +74,7 @@ TEMPLATES: dict[str, list[tuple[str, dict, list[str]]]] = {
         ("diagnostic.plan_tests", {}, ["care.resolve_patient"]),
         ("optimization.allocate", {}, ["bed.find_beds", "staff.find_staff"]),
         ("care.create_pathway", {"pathway": "admission"}, ["optimization.allocate"]),
+        ("billing.estimate", {}, ["optimization.allocate"]),
     ],
     "appointment": [
         ("care.resolve_patient", {"required": True, "allow_create": True}, []),
@@ -88,6 +94,7 @@ TEMPLATES: dict[str, list[tuple[str, dict, list[str]]]] = {
         ("pharmacy.discharge_meds", {}, ["care.discharge_readiness"]),
         ("appointment.follow_up", {}, ["care.discharge_readiness"]),
         ("bed.plan_release", {}, ["care.discharge_readiness"]),
+        ("billing.clearance", {}, ["care.resolve_patient"]),
     ],
     "bed_query": [("bed.status_report", {}, [])],
     "optimization": [
@@ -103,6 +110,7 @@ TEMPLATES: dict[str, list[tuple[str, dict, list[str]]]] = {
     "surgery": [
         ("care.resolve_patient", {"required": False}, []),
         ("optimization.schedule_surgery", {}, ["care.resolve_patient"]),
+        ("billing.estimate", {}, ["optimization.schedule_surgery"]),
     ],
     "patient_status": [
         ("care.resolve_patient", {"required": True}, []),
@@ -123,10 +131,33 @@ def _staffing_steps(text: str, entities: dict) -> list[tuple[str, dict, list[str
     return [("staff.availability", {}, [])]
 
 
+_WHAT_IF = re.compile(r"what[- ]if|simulat|digital twin|scenario|mass casualty|surge", re.I)
+
+
+def _analytics_steps(text: str) -> list[tuple[str, dict, list[str]]]:
+    if _WHAT_IF.search(text):  # prescriptive "what-if" → digital-twin simulation
+        return [("optimization.what_if", {}, []), ("optimization.bottlenecks", {}, [])]
+    return TEMPLATES["analytics"]
+
+
+def _billing_steps(text: str) -> list[tuple[str, dict, list[str]]]:
+    step = "billing.estimate" if re.search(r"estimat|how much will|cost of|package|kharch", text, re.I) else "billing.bill_status"
+    return [("care.resolve_patient", {"required": False}, []), (step, {}, ["care.resolve_patient"])]
+
+
+def _ambulance_steps(text: str, entities: dict) -> list[tuple[str, dict, list[str]]]:
+    if entities.get("locality") or entities.get("pickup") or re.search(r"send|dispatch|need|accident|collapsed|call|bhejo", text, re.I):
+        return [("care.resolve_patient", {"required": False}, []), ("ambulance.dispatch", {}, ["care.resolve_patient"]),
+                ("emergency.capacity_check", {}, [])]
+    return [("ambulance.fleet_status", {}, [])]
+
+
 def build_plan(intents: list[str], text: str, entities: dict) -> list[dict]:
     steps: dict[str, dict] = {}
     for intent in intents:
-        template = _staffing_steps(text, entities) if intent == "staffing" else TEMPLATES.get(intent, [])
+        dynamic = {"staffing": lambda: _staffing_steps(text, entities), "analytics": lambda: _analytics_steps(text),
+                   "billing": lambda: _billing_steps(text), "ambulance": lambda: _ambulance_steps(text, entities)}
+        template = dynamic[intent]() if intent in dynamic else TEMPLATES.get(intent, [])
         for sid, params, deps in template:
             if sid in steps:
                 cur = steps[sid]
@@ -232,7 +263,11 @@ class Orchestrator:
         checkpoint("understanding")
         patients = [(p.id, p.name, p.mrn) for p in db.scalars(select(Patient)).all()]
         meds = [(m.id, m.name, m.generic) for m in db.scalars(select(Medication)).all()]
-        local = understand_local(req.text, patients, meds)
+        norm = normalize(req.text)
+        nlp_text = resolve_pronoun(norm["text"], None) if norm["hinglish"] else req.text
+        if norm["hinglish"]:
+            emit("thought", "orchestrator", "Hinglish detected — normalised for the local NLP pipeline", nlp_text)
+        local = understand_local(nlp_text, patients, meds)
         nlp = local
         if llm.enabled:
             emit("thought", "orchestrator", f"Querying {settings.llm_model} for intent & entity extraction")
@@ -254,6 +289,8 @@ class Orchestrator:
         intents = [i for i in nlp["intents"] if i["confidence"] >= 0.25][:4] or nlp["intents"][:1]
         if forced:
             intents = [{"name": f, "confidence": 1.0} for f in forced] + [i for i in intents if i["name"] not in forced]
+        if any(i["name"] == "ambulance" for i in intents):  # the ED pre-arrival flow runs when the crew leaves the scene
+            intents = [i for i in intents if i["name"] not in ("emergency", "admission")]
         intent_names = [i["name"] for i in intents]
         req.intents, req.entities, req.nlp_engine, req.confidence = intents, _jsonable(entities), nlp["engine"], round(float(nlp["confidence"]), 3)
         emit("understanding", "orchestrator", "Intent classification: " + ", ".join(f"{i['name']} ({i['confidence']:.0%})" for i in intents),

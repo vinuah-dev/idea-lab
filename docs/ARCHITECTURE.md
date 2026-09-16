@@ -300,3 +300,61 @@ prediction to set the expected discharge date and explains it in the approval ra
 
 - **Local:** TF-IDF (word 1–2-grams ∪ char 3–5-grams) → multinomial Logistic Regression over 11 intents; clause-level classification plus word-bounded keyword rules add secondary intents; suppression rules stop hospital-level questions ("forecast admissions") from spawning patient workflows. Entities by regex + DB grounding (patient names/MRN, medicines), vitals (with °F→°C), bed types/features, tests (longest-match), departments, dates/times, staff counts.
 - **Claude (optional):** `claude-opus-5` with a strict JSON schema (`output_config.format`), low effort, server-side refusal fallbacks; merged with the local DB-grounded entities. Claude also writes the coordination brief. Any LLM failure falls back to the local pipeline.
+- **Hinglish:** a rule-based normaliser (`services/hinglish.py`) rewrites Romanised Hindi phrases ("kitne bed khali hain", "seene mein dard", "usko kal book karo") into English before classification; pronouns become a marker that the copilot resolves from conversation memory. Patient names are masked before intent classification (entity masking) so a name never sways the intent.
+- **Validation:** 5-fold *GroupKFold* (all paraphrase variants of a sentence in one fold → no leakage) plus a 24-sentence held-out set incl. Hinglish; both are reported live on the AI Governance page.
+
+---
+
+## 9. v2 modules (beyond the synopsis)
+
+```mermaid
+flowchart LR
+  CALL[108 call / console / copilot] --> AMB[Ambulance Dispatch Agent]
+  AMB -- nearest capable unit --> FLEET[(Fleet tracker)]
+  FLEET -- crew leaves scene --> PRE[Pre-arrival request<br/>incoming ED case]
+  PRE --> ORCH[Orchestrator: Emergency · Bed · Staff · Optimizer]
+  ORCH -- bay held + team --> HITL{Doctor approval}
+  HITL --> ARR[Arrival: straight to the held bay]
+  ORCH -. admission / surgery .-> BILL[Billing & Insurance Agent<br/>LOS-aware estimate, PM-JAY cover]
+  DIS[Discharge request] --> READ[Readmission risk → follow-up interval]
+  DIS --> CLR[Billing clearance · final bill · PM-JAY claim]
+```
+
+| Module | Where | Key idea |
+|---|---|---|
+| Ambulance & pre-hospital | `agents/ambulance_agent.py`, `services/dispatch.py`, `routers/ambulance.py` | explainable unit ranking, accelerated live tracking, `incoming` ED cases, bay *reserved* until arrival |
+| Digital twin | `services/digital_twin.py`, `routers/twin.py` | discrete-event Monte Carlo from live state; common random numbers; lever search → recommendations |
+| Billing & insurance | `agents/billing_agent.py`, `services/billing.py`, `routers/billing.py` | idempotent charge capture (`source_ref`), PM-JAY per-day / surgical packages, TPA co-pay, claims, clearance |
+| Readmission risk | `services/readmission.py` | LACE index + logistic regression; drives the follow-up interval |
+| ICU central monitor | `services/telemetry.py`, `routers/monitor.py` | mean-reverting telemetry, persistence-filtered smart alarms, WebSocket stream |
+| Copilot | `routers/copilot.py`, `components/Copilot.tsx` | Hinglish normalisation, conversation memory, clarification questions |
+| Documentation | `routers/docs.py` | AI-drafted SOAP notes (draft → clinician signs), SBAR handover |
+| Governance | `routers/governance.py` | HITL rates, decision latency, autonomy ratio, model cards, safety & access metrics |
+| Public screens | `routers/public.py` | token-only TV display, MRN + phone-digit kiosk with rate limiting |
+| Security | `security.py`, `main.py` | login lock-out, password policy, security headers, request IDs, record-access log |
+
+### 9.1 Ambulance unit selection
+
+For a call at location *p* with predicted triage level *L* (NEWS2 + red flags from paramedic vitals / complaint):
+
+```
+eta(u)  = haversine(u, p) × 1.35 (road factor) ÷ speed(time of day) × 60 + 1 min turnout
+cost(u) = eta(u) + 6·[L ≤ 2 and u is BLS] + 4·[u is the hospital's own ALS unit and L ≥ 3]
+```
+The lowest-cost unit is dispatched automatically (life-critical actions are exempt from approval holds in every autonomy mode). When the crew leaves the scene, an `incoming` emergency case is created and the Emergency → Bed → Staff → Optimizer pipeline runs; the approved bay is **reserved** (not occupied) until arrival, when the patient goes straight into it.
+
+### 9.2 Digital twin
+
+State at *t = 0*: occupied beds (remaining stay from expected discharge), beds being cleaned, ED patients in work-up, waiting, or boarding. Events: ED arrival (Poisson, hour-of-day profile × surge), ED decision after exponential work-up (admission probability by triage level, critical-care need by level), elective admission (08:00–14:00), discharge (log-normal LOS, only 09:00–20:00), bed turnaround (45 min). Staff absence beyond a 10 % float pool closes beds proportionally. KPIs per replication: occupancy, boarding patient-hours, P90 boarding wait, ED saturation hours, cancelled electives. *R* replications for baseline and scenario share random streams (**common random numbers**), so the comparison is low-variance and reproducible. Recommendations: each lever (surge beds, discharge lounge, rapid turnaround, criteria-led discharge, elective deferral) is simulated and ranked by the reduction of `boarding + 3·ED-saturation + 4·cancellations`.
+
+### 9.3 Billing engine
+
+Every billable event maps to a charge with a stable `source_ref` (`room:<adm>`, `dx:<order>`, `rx:<prescription>`, `sx:<surgery>`, …), so re-syncing updates quantities (bed-days grow) without duplicates. Coverage: **PM-JAY** — the surgical package if a procedure was performed, otherwise the per-day medical package for the highest level of care (routine ward / HDU / ICU / ICU + ventilator); cashless, the difference is a hospital package adjustment. **Private TPA** — 90 % up to a ₹3 lakh sum insured. Estimates use the LOS model's P10/P50/P90 stay.
+
+### 9.4 Readmission risk (LACE)
+
+`L` length of stay (0–7), `A` emergent admission (3), `C` Charlson index from the problem list (0–5), `E` ED visits in 6 months (0–4). A logistic regression on LACE, age, critical-care stay, polypharmacy and abnormal results gives a probability; ≥ 20 % → high → follow-up in 5 days and a 48-hour phone call; 10–20 % → 10 days; otherwise 14 days.
+
+### 9.5 Smart alarms
+
+A limit breach (e.g. SpO₂ < 90 %, HR > 130, SBP < 90) must persist for 3 consecutive readings before it alarms; shorter breaches are counted as suppressed artefacts — the monitor shows how many alarms this avoided.

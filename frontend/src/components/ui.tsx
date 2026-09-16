@@ -194,7 +194,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastCtx.Provider value={push}>
       {children}
-      <div className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-96 max-w-[calc(100vw-2rem)] flex-col gap-2">
+      <div className="pointer-events-none fixed bottom-4 left-4 z-[60] flex w-96 max-w-[calc(100vw-2rem)] flex-col gap-2 lg:left-[17rem]">
         {toasts.map((t) => (
           <div key={t.id} className={cls('fade-in pointer-events-auto flex gap-3 rounded-xl border bg-white p-3 shadow-lg', t.level === 'critical' ? 'border-red-200' : 'border-slate-200')}>
             {icon(t.level)}

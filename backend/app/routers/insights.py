@@ -3,10 +3,11 @@ from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from .. import __version__
 from .. import serializers as ser
 from ..agents.llm import llm
 from ..agents.optimization_agent import ResourceOptimizationAgent
@@ -214,7 +215,7 @@ def audit(limit: int = 200, actor_type: str | None = None, db: Session = Depends
 # ------------------------------------------------------------------ system & simulation
 @router.get("/system/status")
 def system_status():
-    return {"app": settings.app_name, "hospital": settings.hospital_name, "version": "1.0.0",
+    return {"app": settings.app_name, "hospital": settings.hospital_name, "version": __version__,
             "database": "PostgreSQL" if settings.database_url.startswith("postgres") else "SQLite",
             "llm": {"enabled": llm.enabled, "model": settings.llm_model if llm.enabled else None, "last_error": llm.last_error},
             "agents": len(AGENTS), "websocket_clients": bus.count, "simulation": simulator.running}
@@ -297,3 +298,51 @@ def portal_request(rid: int, db: Session = Depends(get_db), user: User = Depends
     if not r or r.submitted_by != user.id:
         raise HTTPException(404, "Request not found")
     return {"id": r.id, "status": r.status, "summary": r.summary}
+
+
+class PortalPay(BaseModel):
+    amount: float = Field(gt=0)
+
+
+@router.get("/portal/bill")
+def portal_bill(db: Session = Depends(get_db), user: User = Depends(require_roles("patient"))):
+    from ..services import billing
+    p = db.get(Patient, user.patient_id)
+    inv = billing.sync_patient(db, p, force=True)
+    db.commit()
+    return {"payer": p.insurance_scheme, "payer_label": billing.PAYERS.get(p.insurance_scheme or "self"), "insurance_id": p.insurance_id,
+            "invoice": ser.invoice(inv, billing.summarize(inv), detail=True) if inv else None}
+
+
+@router.post("/portal/pay")
+def portal_pay(body: PortalPay, db: Session = Depends(get_db), user: User = Depends(require_roles("patient"))):
+    """Simulated UPI payment for the demo — no real payment gateway is contacted."""
+    import secrets
+
+    from ..services import billing
+    from ..services.activity import log_audit
+    p = db.get(Patient, user.patient_id)
+    inv = billing.sync_patient(db, p, force=True)
+    if not inv:
+        raise HTTPException(400, "Nothing to pay")
+    try:
+        pay = billing.record_payment(db, inv, body.amount, "upi", f"UPI-DEMO-{secrets.token_hex(4).upper()}", f"{p.name} (patient portal)")
+    except billing.BillingError as exc:
+        raise HTTPException(400, str(exc))
+    log_audit(db, p.name, "user", "portal_payment", "invoice", inv.id, {"amount": pay.amount})
+    db.commit()
+    bus.publish("refresh", {"scope": ["billing"]})
+    return {"reference": pay.reference, "amount": pay.amount, "summary": billing.summarize(inv)}
+
+
+ACCESS_LABELS = {"view_patient": "Viewed your record", "record_vitals": "Recorded your observations",
+                 "update_patient": "Updated your details", "alarm_ack": "Acknowledged a monitor alarm"}
+
+
+@router.get("/portal/access-log")
+def portal_access_log(db: Session = Depends(get_db), user: User = Depends(require_roles("patient"))):
+    """Who accessed my record — transparency in the spirit of India's DPDP Act 2023."""
+    rows = db.scalars(select(AuditLog).where(AuditLog.entity == "patient", AuditLog.entity_id == user.patient_id,
+                                             AuditLog.action.in_(list(ACCESS_LABELS))).order_by(AuditLog.timestamp.desc()).limit(50)).all()
+    return [{"actor": a.actor, "role": (a.details or {}).get("role") or a.actor_type, "action": ACCESS_LABELS[a.action],
+             "timestamp": a.timestamp.isoformat()} for a in rows]

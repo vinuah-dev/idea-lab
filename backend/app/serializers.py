@@ -38,6 +38,7 @@ def patient(p: m.Patient | None) -> dict | None:
         "blood_group": p.blood_group, "allergies": p.allergies or [], "conditions": p.conditions or [],
         "status": p.status, "risk_score": p.risk_score, "primary_doctor_id": p.primary_doctor_id,
         "primary_doctor": p.primary_doctor.name if p.primary_doctor else None, "created_at": _iso(p.created_at),
+        "insurance_scheme": p.insurance_scheme or "self", "insurance_id": p.insurance_id,
     }
 
 
@@ -223,3 +224,70 @@ def user(u: m.User) -> dict:
         "id": u.id, "username": u.username, "full_name": u.full_name, "email": u.email, "role": u.role,
         "department_id": u.department_id, "staff_id": u.staff_id, "patient_id": u.patient_id,
     }
+
+
+# ---------------------------------------------------------------- billing
+def charge(c: m.Charge) -> dict:
+    return {"id": c.id, "category": c.category, "description": c.description, "quantity": c.quantity,
+            "unit_price": c.unit_price, "amount": c.amount, "source_ref": c.source_ref, "created_at": _iso(c.created_at)}
+
+
+def payment(p: m.Payment) -> dict:
+    return {"id": p.id, "amount": p.amount, "mode": p.mode, "reference": p.reference, "received_by": p.received_by,
+            "created_at": _iso(p.created_at)}
+
+
+def claim(c: m.InsuranceClaim) -> dict:
+    return {"id": c.id, "invoice_id": c.invoice_id, "scheme": c.scheme, "package_code": c.package_code, "package_name": c.package_name,
+            "claimed_amount": c.claimed_amount, "approved_amount": c.approved_amount, "status": c.status,
+            "documents": c.documents or [], "notes": c.notes, "submitted_at": _iso(c.submitted_at), "decided_at": _iso(c.decided_at),
+            "invoice": c.invoice.number if c.invoice else None,
+            "patient": patient_brief(c.invoice.patient) if c.invoice else None}
+
+
+def invoice(inv: m.Invoice, summary: dict | None = None, detail: bool = False) -> dict:
+    from .services.billing import PAYERS
+    data = {"id": inv.id, "number": inv.number, "patient": patient_brief(inv.patient), "admission_id": inv.admission_id,
+            "payer": inv.payer, "payer_label": PAYERS.get(inv.payer, inv.payer), "status": inv.status,
+            "created_at": _iso(inv.created_at), "finalized_at": _iso(inv.finalized_at)}
+    if summary:
+        data["summary"] = summary
+    if detail:
+        data["charges"] = [charge(c) for c in inv.charges]
+        data["payments"] = [payment(p) for p in inv.payments]
+        data["claims"] = [claim(c) for c in inv.claims]
+    return data
+
+
+# ---------------------------------------------------------------- pre-hospital
+def ambulance(a: m.Ambulance) -> dict:
+    return {"id": a.id, "code": a.code, "vehicle_type": a.vehicle_type, "status": a.status, "base": a.base,
+            "lat": round(a.lat, 5), "lng": round(a.lng, 5), "crew": a.crew or []}
+
+
+def dispatch(d: m.Dispatch) -> dict:
+    from .services.dispatch import SCENE_MINUTES
+    if d.status == "to_scene":
+        remaining = d.eta_scene_min * (1 - d.progress) + SCENE_MINUTES + d.eta_hospital_min
+    elif d.status == "on_scene":
+        remaining = SCENE_MINUTES * (1 - d.progress) + d.eta_hospital_min
+    elif d.status == "to_hospital":
+        remaining = d.eta_hospital_min * (1 - d.progress)
+    else:
+        remaining = 0
+    return {"id": d.id, "ambulance_id": d.ambulance_id, "ambulance": d.ambulance.code if d.ambulance else None,
+            "vehicle_type": d.ambulance.vehicle_type if d.ambulance else None, "patient": patient_brief(d.patient),
+            "emergency_case_id": d.emergency_case_id, "request_id": d.request_id, "caller": d.caller, "locality": d.locality,
+            "pickup": {"lat": d.pickup_lat, "lng": d.pickup_lng}, "complaint": d.complaint, "severity": d.severity,
+            "vitals": d.vitals or {}, "status": d.status, "progress": round(d.progress, 3),
+            "distance_scene_km": d.distance_scene_km, "distance_hospital_km": d.distance_hospital_km,
+            "eta_scene_min": d.eta_scene_min, "eta_hospital_min": d.eta_hospital_min,
+            "minutes_to_hospital": round(remaining, 1), "selection": d.selection or [],
+            "created_at": _iso(d.created_at), "on_scene_at": _iso(d.on_scene_at), "departed_scene_at": _iso(d.departed_scene_at),
+            "arrived_at": _iso(d.arrived_at)}
+
+
+def note(n: m.ClinicalNote) -> dict:
+    return {"id": n.id, "patient_id": n.patient_id, "note_type": n.note_type, "subjective": n.subjective, "objective": n.objective,
+            "assessment": n.assessment, "plan": n.plan, "ai_drafted": n.ai_drafted, "status": n.status, "author": n.author,
+            "created_at": _iso(n.created_at)}

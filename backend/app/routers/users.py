@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from .. import serializers as ser
 from ..database import get_db
 from ..models import Staff, User
-from ..security import ROLES, get_current_user, hash_password, require_roles, verify_password
+from ..security import ROLES, get_current_user, hash_password, password_problem, require_roles, verify_password
 from ..services.activity import log_audit
 
 router = APIRouter(prefix="/api", tags=["users & access"])
@@ -48,6 +48,8 @@ def list_users(db: Session = Depends(get_db), _: User = Depends(require_roles("a
 def create_user(body: UserIn, db: Session = Depends(get_db), admin: User = Depends(require_roles("admin"))):
     if body.role not in ROLES:
         raise HTTPException(400, f"Role must be one of {', '.join(ROLES)}")
+    if problem := password_problem(body.password):
+        raise HTTPException(400, problem)
     username = body.username.strip().lower()
     if db.scalar(select(User).where(User.username == username)):
         raise HTTPException(409, "Username already exists")
@@ -70,6 +72,8 @@ def patch_user(uid: int, body: UserPatch, db: Session = Depends(get_db), admin: 
         raise HTTPException(400, "You cannot deactivate or demote your own account")
     if body.role and body.role not in ROLES:
         raise HTTPException(400, "Invalid role")
+    if body.password and (problem := password_problem(body.password)):
+        raise HTTPException(400, problem)
     changes = body.model_dump(exclude_none=True)
     for k in ("full_name", "role", "active"):
         if k in changes:
@@ -85,6 +89,8 @@ def patch_user(uid: int, body: UserPatch, db: Session = Depends(get_db), admin: 
 def change_password(body: PasswordIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     if not verify_password(body.current_password, user.password_hash):
         raise HTTPException(400, "Current password is incorrect")
+    if problem := password_problem(body.new_password):
+        raise HTTPException(400, problem)
     user.password_hash = hash_password(body.new_password)
     log_audit(db, user.full_name, "user", "change_password", "user", user.id)
     db.commit()

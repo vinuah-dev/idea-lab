@@ -50,7 +50,8 @@ export default function Emergency() {
 
   return (
     <div>
-      <PageHeader title="Emergency department" icon={<Siren className="h-5 w-5" />} subtitle="NEWS2 early-warning triage (Royal College of Physicians) + red-flag detection → Emergency Support Agent mobilises bed, team and diagnostics" />
+      <PageHeader title="Emergency department" icon={<Siren className="h-5 w-5" />} subtitle="NEWS2 early-warning triage (Royal College of Physicians) + red-flag detection → Emergency Support Agent mobilises bed, team and diagnostics"
+        actions={<Link to="/ambulance" className="inline-flex items-center gap-1.5 rounded-lg bg-fuchsia-50 px-3 py-1.5 text-xs font-medium text-fuchsia-800 ring-1 ring-inset ring-fuchsia-200 hover:bg-fuchsia-100"><Ambulance className="h-3.5 w-3.5" />Ambulance & 108 dispatch</Link>} />
       <div className="grid gap-4 xl:grid-cols-[28rem_1fr]">
         <div className="space-y-4">
           <Card title="New emergency arrival" icon={<Ambulance className="h-4 w-4" />}>
@@ -106,7 +107,7 @@ export default function Emergency() {
               {board.data.map((c) => {
                 const t = TRIAGE_COLORS[c.triage_level]
                 return (
-                  <div key={c.id} className={cls('flex overflow-hidden rounded-xl border bg-white', c.breach ? 'border-red-300 ring-2 ring-red-100' : 'border-slate-200')}>
+                  <div key={c.id} className={cls('flex overflow-hidden rounded-xl border bg-white', c.status === 'incoming' ? 'border-fuchsia-300 ring-2 ring-fuchsia-100' : c.breach ? 'border-red-300 ring-2 ring-red-100' : 'border-slate-200')}>
                     <div className={cls('flex w-16 shrink-0 flex-col items-center justify-center text-white', t.bg)}><div className="text-[10px] uppercase">Triage</div><div className="text-xl font-bold">L{c.triage_level}</div></div>
                     <div className="min-w-0 flex-1 p-3">
                       <div className="flex flex-wrap items-center gap-2">
@@ -115,6 +116,7 @@ export default function Emergency() {
                         <StatusBadge status={c.status} />
                         <Badge tone={c.news2_score >= 7 ? 'red' : c.news2_score >= 5 ? 'orange' : 'slate'}>NEWS2 {c.news2_score}</Badge>
                         {c.breach && <Badge tone="red">TARGET BREACHED</Badge>}
+                        {c.status === 'incoming' && <Badge tone="violet">🚑 Incoming — pre-alerted{c.bed ? `, bay ${c.bed} held` : ''}</Badge>}
                       </div>
                       <div className="mt-0.5 text-sm text-slate-600">{c.chief_complaint}</div>
                       <div className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-slate-500">
@@ -124,7 +126,7 @@ export default function Emergency() {
                     </div>
                     <div className="flex flex-col justify-center gap-1 p-2">
                       <select className="rounded border border-slate-200 px-1 py-0.5 text-[11px]" value={c.status} onChange={(e) => setStatus(c, e.target.value)}>
-                        {['triage', 'awaiting_bed', 'in_treatment', 'admitted', 'discharged'].map((s) => <option key={s} value={s}>{label(s)}</option>)}
+                        {['incoming', 'triage', 'awaiting_bed', 'in_treatment', 'admitted', 'discharged'].map((s) => <option key={s} value={s}>{label(s)}</option>)}
                       </select>
                     </div>
                   </div>

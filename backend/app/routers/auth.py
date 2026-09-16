@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from .. import serializers as ser
 from ..database import get_db
 from ..models import User
-from ..security import create_access_token, get_current_user, verify_password
+from ..security import create_access_token, get_current_user, login_guard, verify_password
 from ..services.activity import log_audit
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -29,24 +29,39 @@ class LoginIn(BaseModel):
     password: str
 
 
-def _login(db: Session, username: str, password: str) -> dict:
-    user = db.scalar(select(User).where(User.username == username.strip().lower()))
+def _login(db: Session, username: str, password: str, client: str = "unknown") -> dict:
+    uname = username.strip().lower()
+    key = f"{uname}|{client}"
+    wait = login_guard.locked_for(key)
+    if wait:
+        raise HTTPException(status_code=429, detail=f"Too many failed attempts — try again in {wait} s")
+    user = db.scalar(select(User).where(User.username == uname))
     if not user or not verify_password(password, user.password_hash) or not user.active:
-        raise HTTPException(status_code=401, detail="Invalid username or password")
-    log_audit(db, user.full_name, "user", "login", "user", user.id)
+        left = login_guard.failure(key)
+        log_audit(db, uname or "unknown", "user", "login_failed", "user", user.id if user else None, {"client": client})
+        db.commit()
+        if not left:
+            raise HTTPException(status_code=429, detail="Too many failed attempts — sign-in locked for 5 minutes")
+        raise HTTPException(status_code=401, detail="Invalid username or password" + (f" ({left} attempt(s) left)" if left <= 2 else ""))
+    login_guard.success(key)
+    log_audit(db, user.full_name, "user", "login", "user", user.id, {"client": client})
     db.commit()
     return {"access_token": create_access_token(user), "token_type": "bearer", "user": ser.user(user)}
 
 
+def _client(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
 @router.post("/login")
-def login(body: LoginIn, db: Session = Depends(get_db)):
-    return _login(db, body.username, body.password)
+def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
+    return _login(db, body.username, body.password, _client(request))
 
 
 @router.post("/token", include_in_schema=True)
-def token(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def token(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     """OAuth2 password flow (used by the Swagger 'Authorize' button)."""
-    return _login(db, form.username, form.password)
+    return _login(db, form.username, form.password, _client(request))
 
 
 @router.get("/me")

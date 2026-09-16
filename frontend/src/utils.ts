@@ -41,7 +41,14 @@ export const STATUS_TONE: Record<string, Tone> = {
   low: 'green', medium: 'amber', high: 'orange', critical: 'red', 'low-medium': 'yellow',
   info: 'sky', success: 'green', warning: 'amber', done: 'green', blocked: 'red',
   routine: 'slate', urgent: 'orange', stat: 'red',
+  incoming: 'violet', to_scene: 'orange', on_scene: 'red', to_hospital: 'blue', arrived: 'green', returning: 'sky',
+  submitted: 'amber', settled: 'green', open: 'sky', final: 'violet', signed: 'green', draft: 'amber',
 }
+
+const INR = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })
+export const inr = (v?: number | null) => (v === null || v === undefined ? '—' : INR.format(v))
+
+export const PAYER_TONE: Record<string, Tone> = { self: 'slate', pmjay: 'emerald', private: 'indigo' }
 
 export const TRIAGE_COLORS: Record<number, { bg: string; text: string; ring: string; label: string }> = {
   1: { bg: 'bg-red-600', text: 'text-red-700', ring: 'ring-red-200', label: 'Resuscitation' },

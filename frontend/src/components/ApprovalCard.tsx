@@ -23,7 +23,8 @@ export default function ApprovalCard({ approval, onDone, compact, alternatives }
   const [overrides, setOverrides] = useState<Record<string, number>>({})
   const alts = alternatives || approval.alternatives || {}
   const canDecide = approval.status === 'pending' && (approval.can_decide ?? (user?.role === 'admin' || approval.required_roles?.includes(user?.role)))
-  const agentKey = Object.entries({ bed: 'Bed', staff: 'Staff', diagnostic: 'Diagnostic', pharmacy: 'Pharmacy', care: 'Care', optimization: 'Optimization', appointment: 'Appointment', emergency: 'Emergency' })
+  const agentKey = Object.entries({ bed: 'Bed', staff: 'Staff', diagnostic: 'Diagnostic', pharmacy: 'Pharmacy', care: 'Care', optimization: 'Optimization',
+    appointment: 'Appointment', emergency: 'Emergency', billing: 'Billing', ambulance: 'Ambulance' })
     .find(([, v]) => approval.agent?.includes(v))?.[0]
   const m = meta(agentKey)
 

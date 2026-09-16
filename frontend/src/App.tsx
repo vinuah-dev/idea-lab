@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useAuth } from './auth'
 import Layout from './components/Layout'
 import Login from './pages/Login'
@@ -22,14 +22,28 @@ import Users from './pages/Users'
 import Portal from './pages/Portal'
 import SystemPage from './pages/System'
 import DischargeSummary from './pages/DischargeSummary'
+import Billing from './pages/Billing'
+import InvoicePrint from './pages/InvoicePrint'
+import AmbulancePage from './pages/AmbulancePage'
+import DigitalTwin from './pages/DigitalTwin'
+import IcuMonitor from './pages/IcuMonitor'
+import Handover from './pages/Handover'
+import Governance from './pages/Governance'
+import QueueDisplay from './pages/QueueDisplay'
+import Kiosk from './pages/Kiosk'
 
 export default function App() {
   const { user } = useAuth()
+  const { pathname } = useLocation()
+  // public screens (no login): waiting-room TV board and self check-in kiosk
+  if (pathname.startsWith('/display')) return <QueueDisplay />
+  if (pathname.startsWith('/kiosk')) return <Kiosk />
   if (!user) return <Login />
   if (user.role === 'patient') {
     return (
       <Routes>
         <Route path="/print/discharge/:id" element={<DischargeSummary />} />
+        <Route path="/print/invoice/:id" element={<InvoicePrint />} />
         <Route element={<Layout />}>
           <Route path="/portal" element={<Portal />} />
           <Route path="/notifications" element={<Notifications />} />
@@ -41,12 +55,16 @@ export default function App() {
   return (
     <Routes>
       <Route path="/print/discharge/:id" element={<DischargeSummary />} />
+      <Route path="/print/invoice/:id" element={<InvoicePrint />} />
       <Route element={<Layout />}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/agents" element={<AgentConsole />} />
         <Route path="/approvals" element={<Approvals />} />
         <Route path="/emergency" element={<Emergency />} />
+        <Route path="/ambulance" element={<AmbulancePage />} />
+        <Route path="/monitor" element={<IcuMonitor />} />
         <Route path="/inpatients" element={<Inpatients />} />
+        <Route path="/handover" element={<Handover />} />
         <Route path="/patients" element={<Patients />} />
         <Route path="/patients/:id" element={<PatientDetail />} />
         <Route path="/beds" element={<Beds />} />
@@ -55,7 +73,10 @@ export default function App() {
         <Route path="/staff" element={<StaffPage />} />
         <Route path="/diagnostics" element={<Diagnostics />} />
         <Route path="/pharmacy" element={<Pharmacy />} />
+        <Route path="/billing" element={<Billing />} />
         <Route path="/analytics" element={<Analytics />} />
+        <Route path="/twin" element={<DigitalTwin />} />
+        <Route path="/governance" element={<Governance />} />
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/audit" element={<Audit />} />
         <Route path="/users" element={<Users />} />

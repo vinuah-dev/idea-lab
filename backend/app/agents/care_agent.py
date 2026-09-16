@@ -222,6 +222,27 @@ class PatientCareAgent(BaseAgent):
         if exp and exp > datetime.now() + timedelta(days=1):
             checks.append(f"Expected LOS not yet reached (planned {exp:%d %b}) — early discharge needs doctor sign-off")
         score = max(0, 100 - 30 * len(blockers) - (10 if abnormal else 0))
+        recs = []
+        try:
+            from ..services.readmission import readmission_risk
+            rr = readmission_risk(db, p, adm)
+            checks.append(f"30-day readmission risk {rr['probability']:.0%} ({rr['band']}, LACE {rr['lace']['score']}) "
+                          f"→ follow-up in {rr['follow_up_days']} days")
+            ctx.blackboard["follow_up_days"] = rr["follow_up_days"]
+            ctx.post(self.key, "readmission", {"probability": rr["probability"], "band": rr["band"], "lace": rr["lace"]["score"]})
+            recs.append(Recommendation(f"Readmission risk {rr['probability']:.0%} ({rr['band']})", "; ".join(rr["actions"][:3]) or "Routine follow-up",
+                                       rr["lace"]["score"], rr["factors"]))
+        except Exception:  # risk model unavailable → readiness still works
+            pass
+        try:
+            from ..services import billing
+            inv = billing.sync_patient(db, p, force=True)
+            if inv:
+                bs = billing.summarize(inv)
+                checks.append(f"Billing {inv.number}: " + ("PM-JAY cashless" if inv.payer == "pmjay" else
+                                                           f"₹{bs['balance']:,.0f} outstanding" if bs["balance"] > 0 else "cleared"))
+        except Exception:
+            pass
         ctx.post(self.key, "discharge", {"admission_id": adm.id, "bed_id": adm.bed_id, "readiness": score})
         action = ProposedAction(
             action_type="discharge_patient",
@@ -237,4 +258,4 @@ class PatientCareAgent(BaseAgent):
                            summary=f"Discharge readiness {score}/100 for {p.name} (LOS {los} days). "
                                    + (f"Blockers: {'; '.join(blockers)}" if blockers else "No blockers found."),
                            data={"readiness": score, "blockers": blockers, "checks": checks, "admission": ser.admission(adm)},
-                           actions=[action])
+                           actions=[action], recommendations=recs)

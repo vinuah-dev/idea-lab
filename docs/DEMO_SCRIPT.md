@@ -1,78 +1,80 @@
-# Demo script (≈ 10 minutes) & viva notes
+# Demo script (≈ 15 minutes) & viva notes
 
-Start the system with `start.bat` (or see README), open http://localhost:5173.
+Start the system with `start.bat` (or see README), open http://localhost:5173. Demo data is anchored to *today*.
 
 ## 1. Command Center — *admin / admin123* (1 min)
 - KPIs: bed occupancy, ICU/ventilator beds, emergency load, OPD waits, staff on duty, approvals.
-- Ward occupancy bars, ED board sorted by triage, 30-day patient-flow chart, **bottlenecks detected by the Resource Optimization Agent**.
-- Top bar: **Live** (WebSocket), NLP engine (Local NLP or Claude), **Simulate** toggle.
+- Ward occupancy, ED board sorted by triage, patient-flow chart, **bottlenecks detected by the Resource Optimization Agent**.
+- Top bar: **Live** (WebSocket), NLP engine (Local NLP or Claude), HITL mode, **Simulate** toggle. Bottom-right: **Copilot**.
 
 ## 2. Synopsis example — ICU admission (2 min)
-AI Agent Console → click **“ICU admission (synopsis example)”**
-(*“Patient needs admission and requires ICU monitoring with ventilator support.”*)
-- Watch the **live agent network**: the orchestrator dispatches Patient Care → Bed → Staff → Diagnostics → Optimizer → Notification; inter-agent **PROPOSE/INFORM** messages animate.
-- **Understanding** panel: intent *admission*, entities *bed_type=icu, features=[ventilator, monitor]*.
-- **Execution plan**: dependency levels (DAG).
-- **Findings**: open *Explain* on the bed / staff / optimizer cards to show the **factor breakdown** (explainable AI).
-- **HITL**: the bed is *held* automatically (reversible), the admission waits for a doctor. No name was given, so a *provisional registration* is created — reception completes identity later.
-- Approve it (optionally pick another bed from the *Modify bed* dropdown) → the admission executes, beds page updates live.
+AI Agent Console → **“ICU admission (synopsis example)”**.
+- Live agent network (11 agents), understanding panel, DAG execution plan, *Explain* factor breakdowns.
+- New in v2: the **Billing & Insurance Agent** adds a **cost estimate** from the predicted stay (and PM-JAY / insurance cover).
+- HITL: bed held automatically; admission waits for a doctor → approve (optionally *Modify bed*).
 
-## 3. Emergency (2 min)
-Emergency → preset **Chest pain** → watch the **live NEWS2 preview** (score, component points, triage level, target time) → *Register & triage*.
-- You land on the agent trace: triage L1, **resuscitation bay with ventilator preferred**, ER doctor chosen, Cardiology consult paged, ACS workup suggested (needs clinician approval), code alert pushed to doctors & nurses (toast).
-- Show that **rejecting** the assignment releases the held bay.
+## 3. 🚑 Ambulance pre-arrival coordination (2 min) — the v2 headline
+Ambulance & 108 → click **Random call** (or pick a locality + complaint → *Dispatch*).
+- The Ambulance Dispatch Agent pre-triages severity, ranks units by ETA (explainable), dispatches automatically (time-critical actions never wait).
+- Watch the unit move on the live map. When the crew leaves the scene the ED receives a **pre-alert** (toast), an *incoming* case appears on the ED board, and the agents propose a bay + team → **approve**: the bay is *held* before arrival.
+- Use *Advance stage* to fast-forward. On arrival the patient goes straight to the held bay (door-to-bay time saved).
 
-## 4. Safety — prescription (1 min)
-Console → **Prescription safety** (*Prescribe amoxicillin for Rohan Mehta* — he is penicillin-allergic).
-- Pharmacy Agent REFUSES → conflict logged → held as **critical** approval for doctor override. Pharmacy → Safety checker shows the same for any patient/drug pair (e.g. warfarin + aspirin).
+## 4. 🧪 Digital twin — what-if (1.5 min)
+Digital Twin → preset **Mass-casualty incident** or **30% nursing absence**.
+- Baseline vs scenario with P10–P90 bands (Monte-Carlo, common random numbers), ED boarding curve, KPI table.
+- **Prescriptive recommendations** — click *Apply in twin & re-run* on the top lever and show boarding dropping.
+- Also via agents: console → *“What if ER arrivals increase by 50% for the next 3 days?”*
 
-## 5. Optimisation (1.5 min)
-- Console → **Optimise roster**: OR-Tools CP-SAT schedules ~77 staff for 7 days (coverage %, fairness of night shifts, rest rules) → admin approves → Staff → *Weekly roster* shows the generated roster.
-- Console → **Global bed optimisation**: places all waiting ER patients optimally + bottlenecks + forecast.
-- OPD & Queue: dynamic priority (click *score* → factor breakdown), ETA per patient, **M/M/c** utilisation ρ, P(wait), Wq.
+## 5. 💳 Billing & insurance (1.5 min)
+Billing & Insurance → KPIs, revenue by category, payer mix (PM-JAY / TPA / self).
+- Open an invoice: itemised charges were **captured automatically** from bed-days, tests, medicines, procedures. Record a UPI payment; submit a PM-JAY claim; as admin settle it in *Insurance claims*.
+- *Cost estimator*: ICU, 70 years, emergency, PM-JAY → P10 / expected / P90 cost from the LOS model.
+- Console → *“What is the bill for Rohan Mehta?”*; discharge a PM-JAY patient → the final bill is closed and the claim filed automatically.
 
-## 6. Analytics & forecasting (1 min)
-Analytics: Holt-Winters forecast with 95 % interval and hold-out MAPE; switch metric to ICU occupancy; observed vs M/M/c waits; equipment & staff utilisation; agent performance.
+## 6. 💬 Copilot (1 min)
+Open **Copilot** → *“ICU mein kitne bed khali hain?”* (Hinglish is normalised: *understood as …*).
+Then *“Where is Rohan Mehta in his care journey?”* → *“Usko kal subah 11 baje cardiology mein book karo”* — the copilot remembers the patient.
+*“Discharge the patient”* in a new chat → it asks **which patient** instead of failing. Approvals can be decided inside the chat.
 
-## 6b. Ward early warning → automatic ICU transfer proposal (1 min)
-Inpatients & Early Warning → pick a general-ward patient → **Obs** → enter HR 130, RR 27, SpO₂ 89, BP 88/55, Temp 39.4 → the live NEWS2
-jumps to ≥ 7 → *Save*. Doctors and nurses get a critical alert and the agents start an **ICU transfer** request (link in the dialog);
-the approval shows the ICU bed, the team and the **ML-predicted length of stay**.
+## 7. Emergency & safety (1.5 min)
+Emergency → preset **Chest pain** → live NEWS2 preview → *Register & triage* (L1, resus bay, code alert). Rejecting the assignment releases the bay.
+Console → **Prescription safety** (amoxicillin for penicillin-allergic Rohan) → Pharmacy Agent REFUSES → held as critical approval.
 
-## 6c. Operation theatres (1 min)
-Operation Theatres → switch the date to **tomorrow** (the list is deliberately inefficient: cases finish after 20:00) → **Optimise day
-(CP-SAT)** → overtime and last-case time drop, no overlaps → *Apply*. Or ask the console *"Schedule a laparoscopic cholecystectomy for
-Rohan Mehta tomorrow"* → ranked theatre slots with explanations → doctor approves → surgical pathway with the WHO checklist is created.
+## 8. Ward care (1.5 min)
+- **ICU Central Monitor** (nurse/doctor): live ECG/pleth, smart alarms with *Ack*, "transients suppressed" counter.
+- Inpatients → record observations with HR 130, RR 27, SpO₂ 89, BP 88/55 → NEWS2 ≥ 7 → automatic ICU-transfer proposal.
+- **Shift Handover (SBAR)** — generated per ward, printable.
+- Patient record → **Clinical notes** → *AI-draft SOAP note* → edit → *sign*. **Readmission risk** card (LACE) drives the follow-up interval.
 
-## 6d. Autonomy policy (0.5 min)
-System & Policy → switch HITL mode to **Supervised** → run *Book OPD appointment* again: now even the booking waits for approval. Switch back to **Balanced**.
+## 9. Optimisation (1 min)
+Operation Theatres → tomorrow → **Optimise day (CP-SAT)**. Console → **Optimise roster** / **Global bed optimisation**. OPD & Queue → M/M/c.
 
-## 7. Patient portal (0.5 min)
-Log out → *patient / patient123* → book a Cardiology visit → the Appointment Agent picks the best doctor/slot and confirms (simulated SMS shown to reception).
-
-## 8. Live simulation & audit (0.5 min)
-Admin → **Simulate**: walk-ins, lab results, bed cleaning, deterioration alerts (NEWS2), ER arrivals routed through the full agent pipeline. Audit Log shows every human decision and agent action.
+## 10. Governance, patient side & public screens (1.5 min)
+- **AI Governance**: approval / modification / rejection rates, median decision time, autonomy ratio, model cards (leakage-free CV, held-out incl. Hinglish, LOS MAE vs naïve, readmission AUC + fairness by gender), medication safety, record-access log.
+- Patient portal (*patient / patient123*): AI booking, **My bill** with demo UPI payment, **Who accessed my record**.
+- Sidebar → **TV display** (tokens only, voice announcements EN + HI) and **Kiosk** (MRN **1001**, phone **1234**).
+- System & Policy → switch autonomy to *Supervised* and show that even bookings wait (ambulance dispatch still does not).
 
 ---
 
 ## Likely viva questions
 
-**Why multi-agent instead of one AI model?** Separation of concerns: each agent owns one domain, its data and its algorithm (CP-SAT, NEWS2, queueing…), so it can be developed, tested and improved independently. The orchestrator composes them per request, and conflicts become explicit and resolvable.
+**Why multi-agent instead of one AI model?** Each agent owns one domain, its data and its algorithm (CP-SAT, NEWS2, queueing, billing rules, dispatch scoring…), so it can be developed, tested and replaced independently; the orchestrator composes them per request and conflicts become explicit.
 
-**How do agents communicate?** Through a shared *blackboard* (per-request context) and FIPA-ACL style messages (INFORM/REQUEST/PROPOSE/REFUSE) that are logged in the trace. Execution order comes from a dependency DAG built by the planner.
+**How do agents communicate?** Through a per-request blackboard and FIPA-ACL style messages (INFORM / REQUEST / PROPOSE / REFUSE) shown in the live trace; execution order comes from a dependency DAG.
 
-**Where exactly is AI used?** (1) NLP — intent classification & entity extraction (ML classifier or Claude); (2) decision support — constraint optimisation, early-warning scoring, forecasting, queue prediction; (3) automation — generating plans, actions and briefs. Clinical decisions stay with humans.
+**How is safety ensured?** Risk-tiered actions and RBAC-checked approvals; modify / reject with rollback; pharmacy refusals cannot auto-execute; AI-drafted notes stay drafts until a clinician signs; everything audited. Only life-critical dispatch bypasses holds — by explicit policy, visible on the Governance page.
 
-**How is safety ensured?** Risk-tiered actions: only reversible / low-risk actions auto-execute; everything else needs an authorised role (RBAC-checked server-side). Approvers can modify or reject; rejection rolls back holds. Pharmacy refusals cannot be auto-executed. Everything is audited.
+**How do you know the ML is any good?** Model cards with honest validation: intent classifier ~74 % leakage-free cross-validation and ~96 % on held-out phrasings incl. Hinglish; LOS MAE vs a naïve baseline and interval coverage; readmission AUC vs LACE alone and a fairness check by gender. All models are trained on synthetic data and must be retrained/recalibrated on local data before real use.
 
-**What if the LLM is wrong or unavailable?** Structured-output schema constrains Claude; entities are re-grounded against the database; any failure falls back to the local classifier. The system runs fully offline.
+**What is a digital twin here?** A stochastic simulation initialised from the live database state (beds, discharges, ED), used to test scenarios before they happen. Common random numbers make baseline-vs-scenario differences meaningful; the lever search makes it prescriptive.
 
-**How does the optimiser handle two patients wanting the same bed?** Beds held by pending approvals are excluded; the CP-SAT model maximises priority-weighted placements across all waiting patients, so the higher-acuity patient keeps the bed and the other receives the next-best one (recorded as a conflict).
+**How does pre-arrival coordination save time?** The ED is alerted when the crew leaves the scene (ETA known), so triage, bay allocation and team assembly happen during transport; on arrival the patient goes straight to a held bay.
 
-**How is waiting time predicted?** M/M/c queueing (Erlang-C) per department + per-patient ETA from the dynamic priority queue.
+**How is billing kept correct?** Charges are derived from clinical events with stable references, so syncing is idempotent; PM-JAY coverage uses package rules; payments cannot exceed the balance; claims cannot be duplicated.
 
-**How accurate is forecasting?** Holt-Winters fitted by grid search; hold-out MAPE is shown on the Analytics page (typically ~8–10 % on the demo data).
+**Privacy?** RBAC, record-access logging with a patient-facing access log (DPDP Act 2023 spirit), token-only public display, kiosk verification with rate limiting, login lock-out.
 
-**Scalability / deployment?** Stateless FastAPI + PostgreSQL in Docker; agents are plain Python classes (could be split into services / message queue); WebSocket bus for live updates.
+**What if the LLM is wrong or unavailable?** Claude output is schema-constrained and re-grounded on the database; any failure falls back to the offline pipeline — the whole system runs without internet (map tiles excepted).
 
-**Limitations?** Synthetic data, demo-scale knowledge base, simulated integrations; real deployment needs clinical validation, HL7/FHIR integration and regulatory compliance.
+**Limitations?** Synthetic data, demo-scale knowledge base and tariffs, simulated integrations (insurer, SMS, HIS, telemetry); real deployment needs clinical validation, ABDM/FHIR integration and regulatory approval.

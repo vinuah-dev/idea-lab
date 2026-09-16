@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from ..events import bus
 from ..models import (Admission, AgentRequest, Appointment, Approval, Bed, CareTask, DiagnosticOrder,
-                      EmergencyCase, Medication, Patient, Prescription, Resource, Shift, Staff, Surgery, User)
+                      EmergencyCase, Invoice, Medication, Patient, Prescription, Resource, Shift, Staff, Surgery, User)
 from ..services.activity import log_audit, notify
 
 FREQ_PER_DAY = {"OD": 1, "BD": 2, "TDS": 3, "QID": 4, "HS": 1, "SOS": 1, "once daily": 1, "twice daily": 2, "thrice daily": 3}
@@ -107,6 +107,13 @@ def assign_emergency(db: Session, p: dict) -> dict:
         raise ActionError("Emergency case not found")
     bed = _bed_free_for(db.get(Bed, p["bed_id"]), case.patient_id)
     _release_other_holds(db, case.patient_id, bed.id)
+    if case.status == "incoming":  # ambulance pre-arrival: hold the bay and team until the patient arrives
+        if bed.status != "occupied":
+            bed.status, bed.patient_id = "reserved", case.patient_id
+        case.assigned_bed_id, case.assigned_doctor_id = bed.id, p.get("doctor_id")
+        _load(db, p.get("doctor_id"), +1)
+        _load(db, p.get("nurse_id"), +1)
+        return {"case_id": case.id, "bed": bed.code, "held_until_arrival": True}
     bed.status, bed.patient_id = "occupied", case.patient_id
     case.assigned_bed_id, case.assigned_doctor_id = bed.id, p.get("doctor_id")
     case.status, case.seen_at = "in_treatment", datetime.now()
@@ -183,7 +190,38 @@ def discharge_patient(db: Session, p: dict) -> dict:
         out["follow_up"] = book_appointment(db, {"patient_id": patient.id, "doctor_id": fu["doctor_id"],
                                                  "department_id": fu.get("department_id"), "scheduled_at": fu["slot"],
                                                  "priority": 3, "reason": "Post-discharge follow-up"})
+    from ..services import billing  # final bill; PM-JAY is cashless, so its claim is filed at discharge
+    inv = billing.sync_patient(db, patient, force=True)
+    if inv:
+        billing.finalize(db, inv)
+        out["invoice"] = inv.number
+        if inv.payer == "pmjay" and not inv.claims:
+            try:
+                out["claim_id"] = billing.submit_claim(db, inv).id
+            except billing.BillingError:
+                pass
     return out
+
+
+def submit_claim(db: Session, p: dict) -> dict:
+    from ..services import billing
+    inv = db.get(Invoice, p["invoice_id"])
+    if inv is None:
+        raise ActionError("Invoice not found")
+    try:
+        claim = billing.submit_claim(db, inv)
+    except billing.BillingError as exc:
+        raise ActionError(str(exc))
+    return {"claim_id": claim.id, "amount": claim.claimed_amount, "package": claim.package_name}
+
+
+def dispatch_ambulance(db: Session, p: dict) -> dict:
+    from ..services import dispatch as dsp
+    try:
+        d = dsp.create_dispatch(db, p)
+    except ValueError as exc:
+        raise ActionError(str(exc))
+    return {"dispatch_id": d.id, "ambulance": d.ambulance.code, "eta_scene_min": d.eta_scene_min}
 
 
 def apply_roster(db: Session, p: dict) -> dict:
@@ -275,6 +313,7 @@ EXECUTORS = {
     "create_prescription": create_prescription, "reorder_medication": reorder_medication,
     "discharge_patient": discharge_patient, "apply_roster": apply_roster, "reassign_staff": reassign_staff,
     "apply_bed_allocation": apply_bed_allocation, "book_surgery": book_surgery, "apply_ot_schedule": apply_ot_schedule,
+    "submit_claim": submit_claim, "dispatch_ambulance": dispatch_ambulance,
 }
 
 REFRESH_SCOPE = {
@@ -282,7 +321,7 @@ REFRESH_SCOPE = {
     "create_diagnostic_orders": ["diagnostics"], "book_appointment": ["appointments"], "create_prescription": ["pharmacy"],
     "reorder_medication": ["pharmacy"], "discharge_patient": ["beds", "patients"], "apply_roster": ["staff"],
     "reassign_staff": ["staff"], "apply_bed_allocation": ["beds", "emergency"], "book_surgery": ["surgeries", "patients"],
-    "apply_ot_schedule": ["surgeries"],
+    "apply_ot_schedule": ["surgeries"], "submit_claim": ["billing"], "dispatch_ambulance": ["ambulance"],
 }
 
 

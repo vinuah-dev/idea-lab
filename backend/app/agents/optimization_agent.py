@@ -184,6 +184,30 @@ class ResourceOptimizationAgent(BaseAgent):
                            summary=f"{horizon}-day forecast: ~{total_adm:.0f} admissions, ~{sum(out['er_visits']['forecast']):.0f} ER visits; "
                                    f"mean bed occupancy {sum(out['bed_occupancy']['forecast']) / horizon:.0%}.")
 
+    def act_what_if(self, ctx: AgentContext) -> AgentResult:
+        """Digital-twin 'what-if': Monte-Carlo simulation of the live hospital under a scenario vs. baseline."""
+        from ..services.digital_twin import Scenario, simulate
+
+        ent = ctx.entities
+        sc = Scenario(horizon_hours=int(min(168, max(24, (ent.get("horizon_days") or 3) * 24))), surge_pct=float(ent.get("surge_pct") or 0),
+                      mass_casualty_patients=int(ent.get("mci_patients") or 0), mass_casualty_hour=2,
+                      closed_critical_beds=int(ent.get("closed_critical_beds") or 0), staff_absent_pct=float(ent.get("staff_absent_pct") or 0))
+        assumed = not any([sc.surge_pct, sc.mass_casualty_patients, sc.closed_critical_beds, sc.staff_absent_pct])
+        if assumed:
+            sc.surge_pct = 30
+            ctx.log(self.key, "No scenario parameters found in the request — assuming a +30% ED arrival surge")
+        res = simulate(ctx.db, sc, replications=20)
+        ks, kb = res["kpis"]["scenario"], res["kpis"]["baseline"]
+        ctx.log(self.key, f"Digital twin: {res['replications']} Monte-Carlo replications × 2 (baseline vs scenario, common random numbers)")
+        recs = [Recommendation(r["title"], r["detail"], round(100 * r["impact"]) if r.get("impact") else None,
+                               [{"factor": "pressure-index reduction", "points": round(100 * r["impact"])}] if r.get("impact") else [])
+                for r in res["recommendations"]]
+        recs.append(Recommendation("Open the Digital Twin page to adjust the scenario", "Sliders for surge, closures, staffing and interventions"))
+        return AgentResult(agent=self.key, recommendations=recs,
+                           data={"scenario": res["scenario"], "kpis": res["kpis"], "recommendations": res["recommendations"], "assumed": assumed},
+                           summary=res["headline"] + f" (Baseline boarding {kb['boarding_patient_hours']['mean']:.0f} patient-hours; "
+                                                     f"scenario {ks['boarding_patient_hours']['mean']:.0f}.)")
+
     def act_bottlenecks(self, ctx: AgentContext) -> AgentResult:
         db = ctx.db
         now = datetime.now()

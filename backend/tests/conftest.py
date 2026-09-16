@@ -8,6 +8,8 @@ _DB = Path(tempfile.gettempdir()) / "medorchestra_test.db"
 os.environ["DATABASE_URL"] = f"sqlite:///{_DB.as_posix()}"
 os.environ["ANTHROPIC_API_KEY"] = ""  # tests always use the local NLP pipeline
 os.environ["AGENT_STEP_DELAY"] = "0"
+os.environ["FLEET_TRACKER"] = "0"  # tests drive ambulances stage by stage
+os.environ["TELEMETRY"] = "0"
 
 from fastapi.testclient import TestClient  # noqa: E402
 

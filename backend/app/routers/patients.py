@@ -1,3 +1,4 @@
+import time
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -23,6 +24,8 @@ class PatientIn(BaseModel):
     blood_group: str | None = None
     allergies: list[str] = []
     conditions: list[str] = []
+    insurance_scheme: str = "self"
+    insurance_id: str | None = None
 
 
 class PatientPatch(BaseModel):
@@ -31,6 +34,12 @@ class PatientPatch(BaseModel):
     allergies: list[str] | None = None
     conditions: list[str] | None = None
     status: str | None = None
+    insurance_scheme: str | None = None
+    insurance_id: str | None = None
+
+
+SCHEMES = ("self", "pmjay", "private")
+_recent_views: dict[tuple[int, int], float] = {}
 
 
 class TaskPatch(BaseModel):
@@ -53,6 +62,8 @@ def list_patients(q: str | None = None, status: str | None = None, limit: int = 
 
 @router.post("/patients")
 def create_patient(body: PatientIn, db: Session = Depends(get_db), user: User = Depends(require_roles("admin", "receptionist", "doctor", "nurse"))):
+    if body.insurance_scheme not in SCHEMES:
+        raise HTTPException(400, f"insurance_scheme must be one of {', '.join(SCHEMES)}")
     count = db.scalar(select(func.count(Patient.id))) or 0
     p = Patient(mrn=f"MRN-{1001 + count}", **body.model_dump())
     db.add(p)
@@ -74,6 +85,11 @@ def patient_detail(pid: int, db: Session = Depends(get_db), user: User = Depends
     p = db.get(Patient, pid)
     if not p:
         raise HTTPException(404, "Patient not found")
+    if user.role != "patient" and time.time() - _recent_views.get((user.id, pid), 0) > 600:
+        # record-access log (patients can see who viewed their record — DPDP-style transparency); de-duplicated per 10 min
+        _recent_views[(user.id, pid)] = time.time()
+        log_audit(db, user.full_name, "user", "view_patient", "patient", pid, {"role": user.role})
+        db.commit()
     adms = db.scalars(select(Admission).where(Admission.patient_id == pid).order_by(Admission.admitted_at.desc())).all()
     appts = db.scalars(select(Appointment).where(Appointment.patient_id == pid).order_by(Appointment.scheduled_at.desc())).all()
     orders = db.scalars(select(DiagnosticOrder).where(DiagnosticOrder.patient_id == pid).order_by(DiagnosticOrder.created_at.desc())).all()
@@ -125,11 +141,24 @@ def patch_patient(pid: int, body: PatientPatch, db: Session = Depends(get_db), u
     p = db.get(Patient, pid)
     if not p:
         raise HTTPException(404, "Patient not found")
+    if body.insurance_scheme and body.insurance_scheme not in SCHEMES:
+        raise HTTPException(400, f"insurance_scheme must be one of {', '.join(SCHEMES)}")
     for k, v in body.model_dump(exclude_none=True).items():
         setattr(p, k, v)
     log_audit(db, user.full_name, "user", "update_patient", "patient", pid, body.model_dump(exclude_none=True))
     db.commit()
     return ser.patient(p)
+
+
+@router.get("/patients/{pid}/readmission-risk")
+def readmission(pid: int, db: Session = Depends(get_db), _: User = Depends(require_roles(*STAFF_ROLES))):
+    from ..services.readmission import readmission_risk
+    p = db.get(Patient, pid)
+    if not p:
+        raise HTTPException(404, "Patient not found")
+    if not db.scalar(select(Admission).where(Admission.patient_id == pid)):
+        return None
+    return readmission_risk(db, p)
 
 
 @router.patch("/care-tasks/{tid}")

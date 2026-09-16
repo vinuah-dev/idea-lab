@@ -42,6 +42,12 @@ class Settings:
     # Simulation
     simulation_interval: float = float(os.getenv("SIMULATION_INTERVAL", "8"))
 
+    # Pre-hospital fleet tracking and bedside telemetry (background threads; disabled in tests)
+    fleet_tracker: bool = _bool("FLEET_TRACKER", True)
+    dispatch_time_scale: float = float(os.getenv("DISPATCH_TIME_SCALE", "20"))  # simulated seconds per real second
+    telemetry_enabled: bool = _bool("TELEMETRY", True)
+    telemetry_interval: float = float(os.getenv("TELEMETRY_INTERVAL", "2"))
+
     cors_origins: list[str] = [
         o.strip()
         for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173").split(",")

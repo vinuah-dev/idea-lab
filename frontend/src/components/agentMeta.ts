@@ -1,4 +1,4 @@
-import { BedDouble, BellRing, CalendarClock, Cpu, HeartPulse, Microscope, Network, Pill, Siren, UserCheck, Users, type LucideIcon } from 'lucide-react'
+import { Ambulance, BedDouble, BellRing, CalendarClock, Cpu, HeartPulse, Microscope, Network, Pill, Receipt, Siren, UserCheck, Users, type LucideIcon } from 'lucide-react'
 
 export interface AgentMeta { short: string; name: string; icon: LucideIcon; color: string }
 
@@ -13,9 +13,11 @@ export const AGENT_META: Record<string, AgentMeta> = {
   emergency: { short: 'Emergency', name: 'Emergency Support Agent', icon: Siren, color: '#dc2626' },
   optimization: { short: 'Optimizer', name: 'Resource Optimization Agent', icon: Cpu, color: '#0d9488' },
   notification: { short: 'Notify', name: 'Notification Agent', icon: BellRing, color: '#ea580c' },
+  billing: { short: 'Billing', name: 'Billing & Insurance Agent', icon: Receipt, color: '#b45309' },
+  ambulance: { short: 'Ambulance', name: 'Ambulance Dispatch Agent', icon: Ambulance, color: '#c026d3' },
   human: { short: 'Human', name: 'Human reviewer', icon: UserCheck, color: '#334155' },
 }
 
-export const AGENT_ORDER = ['emergency', 'bed', 'staff', 'optimization', 'diagnostic', 'pharmacy', 'appointment', 'care', 'notification']
+export const AGENT_ORDER = ['ambulance', 'emergency', 'bed', 'staff', 'optimization', 'diagnostic', 'pharmacy', 'appointment', 'care', 'billing', 'notification']
 
 export const meta = (key?: string | null): AgentMeta => AGENT_META[key || 'orchestrator'] || AGENT_META.orchestrator

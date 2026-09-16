@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowRight, BedDouble, CalendarClock, Cpu, HeartPulse, Loader2, Microscope, Pill, ShieldCheck, Siren, Users } from 'lucide-react'
+import { Ambulance, ArrowRight, BedDouble, BellRing, CalendarClock, Cpu, ExternalLink, HeartPulse, Loader2, Microscope, Pill, Receipt, ShieldCheck, Siren, Users } from 'lucide-react'
 import { api } from '../api'
 import { useAuth } from '../auth'
 
@@ -8,6 +8,8 @@ const AGENTS = [
   { icon: Users, label: 'Staff Scheduling' }, { icon: Microscope, label: 'Diagnostics' },
   { icon: Pill, label: 'Pharmacy' }, { icon: HeartPulse, label: 'Patient Care' },
   { icon: Siren, label: 'Emergency Support' }, { icon: Cpu, label: 'Resource Optimizer' },
+  { icon: Ambulance, label: 'Ambulance Dispatch' }, { icon: Receipt, label: 'Billing & Insurance' },
+  { icon: BellRing, label: 'Notifications' },
 ]
 
 export default function Login() {
@@ -48,7 +50,7 @@ export default function Login() {
         </div>
         <div className="relative mt-auto">
           <h1 className="text-4xl font-semibold leading-tight tracking-tight">
-            Eight specialised AI agents.<br /><span className="text-teal-300">One coordinated hospital.</span>
+            Eleven specialised AI agents.<br /><span className="text-teal-300">One coordinated hospital.</span>
           </h1>
           <p className="mt-4 max-w-lg text-slate-300">
             Resource optimisation, clinical workflow automation and patient-care coordination — orchestrated by a central
@@ -89,6 +91,10 @@ export default function Login() {
                 </button>
               ))}
             </div>
+          </div>
+          <div className="mt-6 flex gap-2 text-xs">
+            <a href="/display" target="_blank" rel="noreferrer" className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 py-2 text-slate-600 hover:border-teal-400 hover:text-teal-800"><ExternalLink className="h-3.5 w-3.5" />Waiting-room TV display</a>
+            <a href="/kiosk" target="_blank" rel="noreferrer" className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 py-2 text-slate-600 hover:border-teal-400 hover:text-teal-800"><ExternalLink className="h-3.5 w-3.5" />Self check-in kiosk</a>
           </div>
         </div>
       </div>
